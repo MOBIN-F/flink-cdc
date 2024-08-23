@@ -29,9 +29,11 @@ import org.apache.flink.cdc.common.event.Event;
 import org.apache.flink.cdc.common.event.SchemaChangeEvent;
 import org.apache.flink.cdc.common.event.TableId;
 import org.apache.flink.cdc.common.event.TruncateTableEvent;
+import org.apache.flink.cdc.common.schema.Column;
 import org.apache.flink.cdc.common.schema.Schema;
 import org.apache.flink.cdc.common.schema.Selectors;
 import org.apache.flink.cdc.common.utils.SchemaUtils;
+import org.apache.flink.cdc.runtime.parser.TransformParser;
 import org.apache.flink.runtime.state.StateInitializationContext;
 import org.apache.flink.runtime.state.StateSnapshotContext;
 import org.apache.flink.streaming.api.graph.StreamConfig;
@@ -47,6 +49,7 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -69,8 +72,8 @@ public class PreTransformOperator extends AbstractStreamOperator<Event>
     private List<UserDefinedFunctionDescriptor> udfDescriptors;
     private Map<TableId, PreTransformProcessor> preTransformProcessorMap;
 
-    public static PreTransformOperator.Builder newBuilder() {
-        return new PreTransformOperator.Builder();
+    public static Builder newBuilder() {
+        return new Builder();
     }
 
     /** Builder of {@link PreTransformOperator}. */
@@ -79,13 +82,13 @@ public class PreTransformOperator extends AbstractStreamOperator<Event>
 
         private final List<Tuple2<String, String>> udfFunctions = new ArrayList<>();
 
-        public PreTransformOperator.Builder addTransform(
+        public Builder addTransform(
                 String tableInclusions, @Nullable String projection, @Nullable String filter) {
             transformRules.add(new TransformRule(tableInclusions, projection, filter, "", "", ""));
             return this;
         }
 
-        public PreTransformOperator.Builder addTransform(
+        public Builder addTransform(
                 String tableInclusions,
                 @Nullable String projection,
                 @Nullable String filter,
@@ -103,8 +106,7 @@ public class PreTransformOperator extends AbstractStreamOperator<Event>
             return this;
         }
 
-        public PreTransformOperator.Builder addUdfFunctions(
-                List<Tuple2<String, String>> udfFunctions) {
+        public Builder addUdfFunctions(List<Tuple2<String, String>> udfFunctions) {
             this.udfFunctions.addAll(udfFunctions);
             return this;
         }
@@ -258,15 +260,15 @@ public class PreTransformOperator extends AbstractStreamOperator<Event>
         Schema newSchema =
                 SchemaUtils.applySchemaChangeEvent(
                         tableChangeInfo.getPreTransformedSchema(), event);
+
         preTransformChangeInfoMap.put(
                 tableId, PreTransformChangeInfo.of(tableId, originalSchema, newSchema));
+        createOrUpdatePreTransformProcessor(tableId, newSchema);
         return event;
     }
 
     private CreateTableEvent transformCreateTableEvent(CreateTableEvent createTableEvent) {
         TableId tableId = createTableEvent.tableId();
-        PreTransformChangeInfo tableChangeInfo = preTransformChangeInfoMap.get(tableId);
-
         for (Tuple2<Selectors, SchemaMetadataTransform> transform : schemaMetadataTransformers) {
             Selectors selectors = transform.f0;
             if (selectors.isMatch(tableId)) {
@@ -277,27 +279,49 @@ public class PreTransformOperator extends AbstractStreamOperator<Event>
                                         createTableEvent.getSchema(), transform.f1));
             }
         }
+        return preTransformCreateTableEvent(tableId, createTableEvent);
+    }
 
+    private CreateTableEvent preTransformCreateTableEvent(
+            TableId tableId, CreateTableEvent createTableEvent) {
+        createOrUpdatePreTransformProcessor(tableId, createTableEvent.getSchema());
+        if (preTransformProcessorMap.containsKey(tableId)) {
+            return preTransformProcessorMap
+                    .get(tableId)
+                    .preTransformCreateTableEvent(createTableEvent);
+        }
+        return createTableEvent;
+    }
+
+    private void createOrUpdatePreTransformProcessor(TableId tableId, Schema tableSchema) {
+        LinkedHashSet<Column> preTransformColumns = new LinkedHashSet<>();
         for (PreTransformer transform : transforms) {
             Selectors selectors = transform.getSelectors();
             if (selectors.isMatch(tableId) && transform.getProjection().isPresent()) {
                 TransformProjection transformProjection = transform.getProjection().get();
                 TransformFilter transformFilter = transform.getFilter().orElse(null);
                 if (transformProjection.isValid()) {
-                    if (!preTransformProcessorMap.containsKey(tableId)) {
-                        preTransformProcessorMap.put(
-                                tableId,
-                                new PreTransformProcessor(
-                                        tableChangeInfo, transformProjection, transformFilter));
-                    }
-                    PreTransformProcessor preTransformProcessor =
-                            preTransformProcessorMap.get(tableId);
-                    // filter out unreferenced columns in pre-transform process
-                    return preTransformProcessor.preTransformCreateTableEvent(createTableEvent);
+                    List<Column> referencedColumns =
+                            TransformParser.generateReferencedColumns(
+                                    transformProjection.getProjection(),
+                                    transformFilter != null
+                                            ? transformFilter.getExpression()
+                                            : null,
+                                    tableSchema.getColumns());
+
+                    // append referenced columns of other projections of the same tableid, if any
+                    preTransformColumns.addAll(referencedColumns);
+                    PreTransformChangeInfo tableChangeInfo =
+                            PreTransformChangeInfo.of(
+                                    tableId,
+                                    tableSchema,
+                                    tableSchema.copy(new ArrayList<>(preTransformColumns)));
+                    preTransformChangeInfoMap.put(tableId, tableChangeInfo);
+                    preTransformProcessorMap.put(
+                            tableId, new PreTransformProcessor(tableChangeInfo));
                 }
             }
         }
-        return createTableEvent;
     }
 
     private Schema transformSchemaMetaData(
@@ -321,37 +345,18 @@ public class PreTransformOperator extends AbstractStreamOperator<Event>
         return schemaBuilder.build();
     }
 
-    private DataChangeEvent processDataChangeEvent(DataChangeEvent dataChangeEvent)
-            throws Exception {
+    private DataChangeEvent processDataChangeEvent(DataChangeEvent dataChangeEvent) {
         TableId tableId = dataChangeEvent.tableId();
-        for (PreTransformer transform : transforms) {
-            Selectors selectors = transform.getSelectors();
-
-            if (selectors.isMatch(tableId) && transform.getProjection().isPresent()) {
-                TransformProjection transformProjection = transform.getProjection().get();
-                TransformFilter transformFilter = transform.getFilter().orElse(null);
-                if (transformProjection.isValid()) {
-                    return processProjection(transformProjection, transformFilter, dataChangeEvent);
-                }
-            }
+        if (!transforms.isEmpty()) {
+            PreTransformProcessor preTransformProcessor = preTransformProcessorMap.get(tableId);
+            return processProjection(preTransformProcessor, dataChangeEvent);
         }
+
         return dataChangeEvent;
     }
 
     private DataChangeEvent processProjection(
-            TransformProjection transformProjection,
-            @Nullable TransformFilter transformFilter,
-            DataChangeEvent dataChangeEvent) {
-        TableId tableId = dataChangeEvent.tableId();
-        PreTransformChangeInfo tableChangeInfo = preTransformChangeInfoMap.get(tableId);
-        if (!preTransformProcessorMap.containsKey(tableId)
-                || !preTransformProcessorMap.get(tableId).hasTableChangeInfo()) {
-            preTransformProcessorMap.put(
-                    tableId,
-                    new PreTransformProcessor(
-                            tableChangeInfo, transformProjection, transformFilter));
-        }
-        PreTransformProcessor preTransformProcessor = preTransformProcessorMap.get(tableId);
+            PreTransformProcessor preTransformProcessor, DataChangeEvent dataChangeEvent) {
         BinaryRecordData before = (BinaryRecordData) dataChangeEvent.before();
         BinaryRecordData after = (BinaryRecordData) dataChangeEvent.after();
         if (before != null) {
