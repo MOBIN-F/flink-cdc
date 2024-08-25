@@ -16,9 +16,6 @@
 name: Flink CDC CI
 on:
   push:
-    branches:
-      - master
-      - release-*
     paths-ignore:
       - 'docs/**'
       - 'README.md'
