@@ -276,8 +276,8 @@ public class PreTransformOperator extends AbstractStreamOperator<Event>
             preTransformedSchema =
                     SchemaUtils.applySchemaChangeEvent(
                             tableChangeInfo.getPreTransformedSchema(), schemaChangeEvent.get());
-            cachePreTransformProcessor(tableId, preTransformedSchema);
         }
+        cachePreTransformProcessor(tableId, originalSchema);
         preTransformChangeInfoMap.put(
                 tableId, PreTransformChangeInfo.of(tableId, originalSchema, preTransformedSchema));
         return schemaChangeEvent;
