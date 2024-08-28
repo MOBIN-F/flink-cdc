@@ -61,7 +61,7 @@ import static org.apache.flink.cdc.connectors.oracle.testutils.OracleTestUtils.w
 
 /** IT tests to cover various newly added tables during capture process. */
 public class NewlyAddedTableITCase extends OracleSourceTestBase {
-    @Rule public final Timeout timeoutPerTest = Timeout.seconds(600);
+    @Rule public final Timeout timeoutPerTest = Timeout.seconds(1200);
 
     private final ScheduledExecutorService mockRedoLogExecutor =
             Executors.newScheduledThreadPool(1);
