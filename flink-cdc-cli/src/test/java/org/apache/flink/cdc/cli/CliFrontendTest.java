@@ -141,7 +141,7 @@ class CliFrontendTest {
                         globalPipelineConfig());
         NoOpComposer composer = new NoOpComposer();
         executor.setComposer(composer);
-        PipelineExecution.ExecutionInfo executionInfo = executor.run();
+        PipelineExecution.ExecutionInfo executionInfo = executor.deployWithNoOpComposer();
         assertThat(executionInfo.getId()).isEqualTo("fake-id");
         assertThat(executionInfo.getDescription()).isEqualTo("fake-description");
     }

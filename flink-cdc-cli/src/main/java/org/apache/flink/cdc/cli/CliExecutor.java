@@ -91,6 +91,11 @@ public class CliExecutor {
                 flinkHome);
     }
 
+    @VisibleForTesting
+    public PipelineExecution.ExecutionInfo deployWithNoOpComposer() throws Exception {
+        return executePipeline(this.composer);
+    }
+
     private PipelineExecution.ExecutionInfo deployWithLocalExecutor() throws Exception {
         return executePipeline(FlinkPipelineComposer.ofMiniCluster());
     }
