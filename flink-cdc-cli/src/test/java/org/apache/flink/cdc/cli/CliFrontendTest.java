@@ -20,6 +20,7 @@ package org.apache.flink.cdc.cli;
 import org.apache.flink.cdc.composer.PipelineComposer;
 import org.apache.flink.cdc.composer.PipelineExecution;
 import org.apache.flink.cdc.composer.definition.PipelineDef;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.jobgraph.RestoreMode;
 
 import org.apache.flink.shaded.guava31.com.google.common.io.Resources;
@@ -126,7 +127,7 @@ class CliFrontendTest {
         CliExecutor executor =
                 createExecutor(
                         pipelineDef(), "--flink-home", flinkHome(), "--jar", aJar, "--jar", bJar);
-        assertThat(executor.getAdditionalJars()).contains(Paths.get(aJar), Paths.get(bJar));
+        assertThat(executor.getAdditionalJars()).contains(new Path(aJar), new Path(bJar));
     }
 
     @Test
