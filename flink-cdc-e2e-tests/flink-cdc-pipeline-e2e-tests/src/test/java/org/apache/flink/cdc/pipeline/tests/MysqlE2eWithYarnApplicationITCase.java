@@ -81,7 +81,6 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
     }
 
     @Test
-    @Disabled
     public void testSyncWholeDatabase() throws Exception {
         String pipelineJob =
                 String.format(
@@ -94,6 +93,7 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
                                 + "  tables: %s.\\.*\n"
                                 + "  server-id: 5400-5404\n"
                                 + "  server-time-zone: UTC\n"
+                                + "  scan.startup.mode: snapshot\n"
                                 + "\n"
                                 + "sink:\n"
                                 + "  type: values\n"
@@ -110,26 +110,7 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
         Path valuesCdcJar = TestUtils.getResource("values-cdc-pipeline-connector.jar");
         Path mysqlDriverJar = TestUtils.getResource("mysql-driver.jar");
         submitPipelineJob(pipelineJob, mysqlCdcJar, valuesCdcJar, mysqlDriverJar);
-        //        waitUntilJobRunning(Duration.ofSeconds(30));
         LOG.info("Pipeline job is running");
-        Thread.sleep(300000);
-        //        Thread.sleep(100000);
-        //        File file = findFile("../flink-cdc-pipeline-e2e-tests", (dir, name) ->
-        // name.equals("taskmanager.out"));
-        //        List<String> lines = Files.readAllLines(file.toPath());
-        //        lines.forEach(System.out::println);
-
-        //        waitUntilSpecificEvent(
-        //                String.format(
-        //                        "DataChangeEvent{tableId=%s.customers, before=[], after=[104,
-        // user_4, Shanghai, 123567891234], op=INSERT, meta=()}",
-        //                        mysqlInventoryDatabase.getDatabaseName()));
-        //        waitUntilSpecificEvent(
-        //                String.format(
-        //                        "DataChangeEvent{tableId=%s.products, before=[], after=[109, spare
-        // tire, 24 inch spare tire, 22.2, null, null, null], op=INSERT, meta=()}",
-        //                        mysqlInventoryDatabase.getDatabaseName()));
-
         validateResult(
                 "CreateTableEvent{tableId=%s.customers, schema=columns={`id` INT NOT NULL,`name` VARCHAR(255) NOT NULL 'flink',`address` VARCHAR(1024),`phone_number` VARCHAR(512)}, primaryKeys=id, options=()}",
                 "DataChangeEvent{tableId=%s.customers, before=[], after=[104, user_4, Shanghai, 123567891234], op=INSERT, meta=()}",
@@ -146,6 +127,7 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
                 "DataChangeEvent{tableId=%s.products, before=[], after=[104, hammer, 12oz carpenter's hammer, 0.75, white, {\"key4\": \"value4\"}, {\"coordinates\":[4,4],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
                 "DataChangeEvent{tableId=%s.products, before=[], after=[101, scooter, Small 2-wheel scooter, 3.14, red, {\"key1\": \"value1\"}, {\"coordinates\":[1,1],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
                 "DataChangeEvent{tableId=%s.products, before=[], after=[102, car battery, 12V car battery, 8.1, white, {\"key2\": \"value2\"}, {\"coordinates\":[2,2],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}");
+
     }
 
     private void validateResult(String... expectedEvents) throws Exception {

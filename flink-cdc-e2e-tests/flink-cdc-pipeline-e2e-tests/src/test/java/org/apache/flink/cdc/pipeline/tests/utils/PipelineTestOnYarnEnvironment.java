@@ -17,12 +17,17 @@
 
 package org.apache.flink.cdc.pipeline.tests.utils;
 
+import org.apache.flink.api.common.time.Deadline;
+import org.apache.flink.cdc.common.utils.Preconditions;
 import org.apache.flink.core.testutils.CommonTestUtils;
 import org.apache.flink.util.TestLogger;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.flink.yarn.YarnClusterDescriptor;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.Service;
+import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.MiniYARNCluster;
@@ -39,8 +44,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.*;
 
+import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Fail.fail;
 
@@ -59,6 +66,9 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
     protected static File yarnSiteXML = null;
 
     @Rule public final TemporaryFolder temporaryFolder = new TemporaryFolder();
+
+    private static final Duration yarnAppTerminateTimeout = Duration.ofSeconds(120);
+    private static final int sleepIntervalInMS = 100;
 
     // copy from org.apache.flink.yarn.YarnTestBase
     static {
@@ -157,7 +167,7 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
     }
 
     public void submitPipelineJob(String pipelineJob, Path... jars)
-            throws IOException, InterruptedException {
+            throws Exception {
         ProcessBuilder processBuilder = new ProcessBuilder();
         Map<String, String> env = getEnv();
         processBuilder.environment().putAll(getEnv());
@@ -178,19 +188,13 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         }
 
         processBuilder.command(commandList);
-//        processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-//        processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
-//        processBuilder.redirectErrorStream(true);
         LOG.info("starting flink-cdc task with flink on yarn-application");
         Process process = processBuilder.start();
         process.waitFor();
-        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        String line;
-        StringBuilder output = new StringBuilder();
-        while ((line = reader.readLine()) != null) {
-            System.out.println(line + "======");
-            output.append(line).append("\n");
-        }
+        getApplicationId(process);
+        ApplicationId applicationId = ApplicationId.fromString(getApplicationId(process));
+        Preconditions.checkNotNull(applicationId, "applicationId should not be null, pleease check logs");
+        waitApplicationFinishedElseKillIt(applicationId, yarnAppTerminateTimeout, sleepIntervalInMS);
         LOG.info("started flink-cdc task with flink on yarn-application");
     }
 
@@ -207,9 +211,40 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         return env;
     }
 
-    @Test
-    public void test() throws IOException {
-        getEnv();
+    public String getApplicationId(Process process) throws IOException {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        String line;
+        while ((line = reader.readLine()) != null) {
+            if (line.startsWith("Job ID")) {
+                LOG.info(line);
+                return line.split(":")[1].trim();
+            }
+        }
+        return null;
+    }
+
+    protected void waitApplicationFinishedElseKillIt(
+            ApplicationId applicationId,
+            Duration timeout,
+            int sleepIntervalInMS)
+            throws Exception {
+        Deadline deadline = Deadline.now().plus(timeout);
+        YarnApplicationState state =
+                yarnClient.getApplicationReport(applicationId).getYarnApplicationState();
+
+        while (state != YarnApplicationState.FINISHED) {
+            if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
+                fail("Application became FAILED or KILLED while expecting FINISHED");
+            }
+
+            if (deadline.isOverdue()) {
+                yarnClient.killApplication(applicationId);
+                fail("Application didn't finish before timeout");
+            }
+
+            sleep(sleepIntervalInMS);
+            state = yarnClient.getApplicationReport(applicationId).getYarnApplicationState();
+        }
     }
 
     /**
@@ -252,14 +287,5 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
             }
         }
         return null;
-    }
-
-    public static void main(String[] args) {
-        startMiniYARNCluster();
-    }
-
-    @Test
-    public void t() throws IOException, InterruptedException {
-        submitPipelineJob("bbb");
     }
 }
