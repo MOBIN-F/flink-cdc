@@ -18,6 +18,7 @@
 package org.apache.flink.cdc.pipeline.tests;
 
 import org.apache.flink.cdc.common.test.utils.TestUtils;
+import org.apache.flink.cdc.common.utils.Preconditions;
 import org.apache.flink.cdc.connectors.mysql.testutils.MySqlContainer;
 import org.apache.flink.cdc.connectors.mysql.testutils.MySqlVersion;
 import org.apache.flink.cdc.connectors.mysql.testutils.UniqueDatabase;
@@ -32,8 +33,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
+import org.testcontainers.shaded.org.apache.commons.io.FileUtils;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /** End-to-end tests for mysql cdc pipeline job. */
 // @RunWith(Parameterized.class)
@@ -106,12 +118,12 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
                         MYSQL_TEST_PASSWORD,
                         mysqlInventoryDatabase.getDatabaseName(),
                         1);
-        Path mysqlCdcJar = TestUtils.getResource("mysql-cdc-pipeline-connector.jar");
-        Path valuesCdcJar = TestUtils.getResource("values-cdc-pipeline-connector.jar");
-        Path mysqlDriverJar = TestUtils.getResource("mysql-driver.jar");
-        submitPipelineJob(pipelineJob, mysqlCdcJar, valuesCdcJar, mysqlDriverJar);
+        Path mysqlCdcJar = TestUtils.getResource("mysql-cdc-pipeline-connector.jar", "flink-cdc-e2e-tests/flink-cdc-pipeline-e2e-tests/target/dependencies");
+        Path valuesCdcJar = TestUtils.getResource("values-cdc-pipeline-connector.jar", "flink-cdc-e2e-tests/flink-cdc-pipeline-e2e-tests/target/dependencies");
+        Path mysqlDriverJar = TestUtils.getResource("mysql-driver.jar", "flink-cdc-e2e-tests/flink-cdc-pipeline-e2e-tests/target/dependencies");
+        String applicationId = submitPipelineJob(pipelineJob, mysqlCdcJar, valuesCdcJar, mysqlDriverJar);
         LOG.info("Pipeline job is running");
-        validateResult(
+        validateResult(applicationId,
                 "CreateTableEvent{tableId=%s.customers, schema=columns={`id` INT NOT NULL,`name` VARCHAR(255) NOT NULL 'flink',`address` VARCHAR(1024),`phone_number` VARCHAR(512)}, primaryKeys=id, options=()}",
                 "DataChangeEvent{tableId=%s.customers, before=[], after=[104, user_4, Shanghai, 123567891234], op=INSERT, meta=()}",
                 "DataChangeEvent{tableId=%s.customers, before=[], after=[103, user_3, Shanghai, 123567891234], op=INSERT, meta=()}",
@@ -130,38 +142,29 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
 
     }
 
-    private void validateResult(String... expectedEvents) throws Exception {
+    private void validateResult(String applicationId,String... expectedEvents) {
+        List<String> expectedEventsList = Arrays.asList(expectedEvents);
+        List<String> taskManagerOutContent = getTaskManagerOutContent(applicationId);
         String dbName = mysqlInventoryDatabase.getDatabaseName();
-        for (String event : expectedEvents) {
-            waitUntilSpecificEvent(String.format(event, dbName, dbName));
+        for (int i = 0; i < expectedEventsList.size(); i++) {
+            String event = expectedEventsList.get(i);
+            event = String.format(event, dbName, dbName);
+            assertThat(taskManagerOutContent.get(i)).isEqualTo(event);
         }
     }
 
-    private void waitUntilSpecificEvent(String event) throws Exception {
-        //                boolean result = false;
-        //                long endTimeout = System.currentTimeMillis() +
-        //         MysqlE2eWithYarnApplicationITCase.EVENT_WAITING_TIMEOUT;
-        //                while (System.currentTimeMillis() < endTimeout) {
-        //                    String stdout = taskManagerConsumer.toUtf8String();
-        //                    if (stdout.contains(event + "\n")) {
-        //                        result = true;
-        //                        break;
-        //                    }
-        //                    Thread.sleep(1000);
-        //                }
-        //                if (!result) {
-        //                    throw new TimeoutException(
-        //                            "failed to get specific event: "
-        //                                    + event
-        //                                    + " from stdout: "
-        //                                    + taskManagerConsumer.toUtf8String());
-        //                }
+    private List<String> getTaskManagerOutContent(String applicationId) {
+        String containerId = applicationId.replace("application","container_") + "_01_000002";
+        Path resource = TestUtils.getResource(containerId, "flink-cdc-e2e-tests/flink-cdc-pipeline-e2e-tests/target/");
+        try(Stream<Path> taskManagerOutFilePath = Files.walk(resource)) {
+            Optional<File> taskManagerOutFile = taskManagerOutFilePath.filter(path -> path.toString().equals("taskmanager.out")).map(Path::toFile).findFirst();
+            if (taskManagerOutFile.isPresent()) {
+                return FileUtils.readLines(taskManagerOutFile.get(), Charset.defaultCharset());
+            } else {
+                throw new FileNotFoundException(String.format("taskmanager.out is not existed for %s", applicationId));
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(String.format("Could not search for %s directory.", containerId));
+        }
     }
-
-    //    @Test
-    //    public void log() {
-    //        File file = findFile("../flink-cdc-pipeline-e2e-tests", (dir, name) ->
-    // name.equals("taskmanager.out"));
-    //        System.out.println(file.toPath());
-    //    }
 }
