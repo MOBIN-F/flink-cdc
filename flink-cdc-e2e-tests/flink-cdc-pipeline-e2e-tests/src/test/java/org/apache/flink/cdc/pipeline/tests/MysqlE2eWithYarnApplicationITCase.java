@@ -17,7 +17,6 @@
 
 package org.apache.flink.cdc.pipeline.tests;
 
-import org.apache.flink.cdc.common.test.utils.TestUtils;
 import org.apache.flink.cdc.connectors.mysql.testutils.MySqlContainer;
 import org.apache.flink.cdc.connectors.mysql.testutils.MySqlVersion;
 import org.apache.flink.cdc.connectors.mysql.testutils.UniqueDatabase;
@@ -28,17 +27,13 @@ import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.jupiter.api.Disabled;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 
-import java.nio.file.Path;
-
 /** End-to-end tests for mysql cdc pipeline job. */
-@RunWith(Parameterized.class)
+// @RunWith(Parameterized.class)
 public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnvironment {
     private static final Logger LOG =
             LoggerFactory.getLogger(MysqlE2eWithYarnApplicationITCase.class);
@@ -90,7 +85,7 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
                         "source:\n"
                                 + "  type: mysql\n"
                                 + "  hostname: %s\n"
-                                + "  port: 3306\n"
+                                + "  port: %S\n"
                                 + "  username: %s\n"
                                 + "  password: %s\n"
                                 + "  tables: %s.\\.*\n"
@@ -102,18 +97,25 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
                                 + "\n"
                                 + "pipeline:\n"
                                 + "  parallelism: %d",
-                        INTER_CONTAINER_MYSQL_ALIAS,
+                        MYSQL.getHost(),
+                        MYSQL.getDatabasePort(),
                         MYSQL_TEST_USER,
                         MYSQL_TEST_PASSWORD,
                         mysqlInventoryDatabase.getDatabaseName(),
                         1);
-        Path mysqlCdcJar = TestUtils.getResource("mysql-cdc-pipeline-connector.jar");
-        Path valuesCdcJar = TestUtils.getResource("values-cdc-pipeline-connector.jar");
-        Path mysqlDriverJar = TestUtils.getResource("mysql-driver.jar");
-        ProcessBuilder processBuilder = new ProcessBuilder();
-        submitPipelineJob(pipelineJob, mysqlCdcJar, valuesCdcJar, mysqlDriverJar);
+        //        Path mysqlCdcJar = TestUtils.getResource("mysql-cdc-pipeline-connector.jar");
+        //        Path valuesCdcJar = TestUtils.getResource("values-cdc-pipeline-connector.jar");
+        //        Path mysqlDriverJar = TestUtils.getResource("mysql-driver.jar");
+        submitPipelineJob(pipelineJob);
         //        waitUntilJobRunning(Duration.ofSeconds(30));
         LOG.info("Pipeline job is running");
+        Thread.sleep(300000);
+        //        Thread.sleep(100000);
+        //        File file = findFile("../flink-cdc-pipeline-e2e-tests", (dir, name) ->
+        // name.equals("taskmanager.out"));
+        //        List<String> lines = Files.readAllLines(file.toPath());
+        //        lines.forEach(System.out::println);
+
         //        waitUntilSpecificEvent(
         //                String.format(
         //                        "DataChangeEvent{tableId=%s.customers, before=[], after=[104,
@@ -151,23 +153,30 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
     }
 
     private void waitUntilSpecificEvent(String event) throws Exception {
-        //        boolean result = false;
-        //        long endTimeout = System.currentTimeMillis() +
-        // MysqlE2eWithYarnApplicationITCase.EVENT_WAITING_TIMEOUT;
-        //        while (System.currentTimeMillis() < endTimeout) {
-        //            String stdout = taskManagerConsumer.toUtf8String();
-        //            if (stdout.contains(event + "\n")) {
-        //                result = true;
-        //                break;
-        //            }
-        //            Thread.sleep(1000);
-        //        }
-        //        if (!result) {
-        //            throw new TimeoutException(
-        //                    "failed to get specific event: "
-        //                            + event
-        //                            + " from stdout: "
-        //                            + taskManagerConsumer.toUtf8String());
-        //        }
+        //                boolean result = false;
+        //                long endTimeout = System.currentTimeMillis() +
+        //         MysqlE2eWithYarnApplicationITCase.EVENT_WAITING_TIMEOUT;
+        //                while (System.currentTimeMillis() < endTimeout) {
+        //                    String stdout = taskManagerConsumer.toUtf8String();
+        //                    if (stdout.contains(event + "\n")) {
+        //                        result = true;
+        //                        break;
+        //                    }
+        //                    Thread.sleep(1000);
+        //                }
+        //                if (!result) {
+        //                    throw new TimeoutException(
+        //                            "failed to get specific event: "
+        //                                    + event
+        //                                    + " from stdout: "
+        //                                    + taskManagerConsumer.toUtf8String());
+        //                }
     }
+
+    //    @Test
+    //    public void log() {
+    //        File file = findFile("../flink-cdc-pipeline-e2e-tests", (dir, name) ->
+    // name.equals("taskmanager.out"));
+    //        System.out.println(file.toPath());
+    //    }
 }

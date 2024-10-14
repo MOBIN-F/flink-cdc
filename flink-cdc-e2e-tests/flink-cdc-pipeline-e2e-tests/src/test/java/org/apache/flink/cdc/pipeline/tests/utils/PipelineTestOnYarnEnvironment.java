@@ -34,17 +34,12 @@ import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.FilenameFilter;
-import java.io.IOException;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Fail.fail;
@@ -90,7 +85,7 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         YARN_CONFIGURATION.setInt(YarnConfiguration.RESOURCEMANAGER_CONNECT_MAX_WAIT_MS, 5000);
         YARN_CONFIGURATION.set(TEST_CLUSTER_NAME_KEY, "flink-yarn-tests-application");
     }
-
+    // 54627
     @Before
     public void before() throws Exception {
         if (yarnClient == null) {
@@ -121,47 +116,10 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
                 yarnCluster.start();
             }
 
-            Map<String, String> map = new HashMap<String, String>(System.getenv());
-
-            //            File flinkConfDirPath =
-            //                    TestUtils.findFile(
-            //                            flinkDistRootDir,
-            //                            new ContainsName(
-            //                                    new String[]
-            // {GlobalConfiguration.FLINK_CONF_FILENAME}));
-            //            assertThat(flinkConfDirPath).isNotNull();
-
-            //            final String confDirPath =
-            // flinkConfDirPath.getParentFile().getAbsolutePath();
-            //            globalConfiguration = GlobalConfiguration.loadConfiguration(confDirPath);
-            //            globalConfiguration.set(
-            //                    JobManagerOptions.RESOURCE_WAIT_TIMEOUT, Duration.ofSeconds(30));
-
-            // copy conf dir to test temporary workspace location
-            //            tempConfPathForSecureRun = tmp.toPath().resolve("conf").toFile();
-            //            tempConfPathForSecureRun.mkdir();
-            //
-            //            FileUtils.copyDirectory(new File(confDirPath), tempConfPathForSecureRun);
-            //
-            //            BootstrapTools.writeConfiguration(
-            //                    globalConfiguration,
-            //                    new File(tempConfPathForSecureRun,
-            // GlobalConfiguration.FLINK_CONF_FILENAME));
-            //
-            //            String configDir = tempConfPathForSecureRun.getAbsolutePath();
-
-            //            LOG.info(
-            //                    "Temporary Flink configuration directory to be used for secure
-            // test: {}",
-            //                    configDir);
-            //
-            //            assertThat(configDir).isNotNull();
-
-            //            map.put(ConfigConstants.ENV_FLINK_CONF_DIR, configDir);
-
             File targetTestClassesFolder = new File("target/test-classes");
             writeYarnSiteConfigXML(YARN_CONFIGURATION, targetTestClassesFolder);
 
+            Map<String, String> map = new HashMap<String, String>(System.getenv());
             map.put(
                     "IN_TESTS",
                     "yes we are in tests"); // see YarnClusterDescriptor() for more infos
@@ -203,20 +161,30 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         ProcessBuilder processBuilder = new ProcessBuilder();
         Map<String, String> env = getEnv();
         processBuilder.environment().putAll(getEnv());
-        Path yamlScript = temporaryFolder.newFile().toPath();
+        Path yamlScript = temporaryFolder.newFile("mysql-to-kafka.yml").toPath();
         Files.write(yamlScript, pipelineJob.getBytes());
-        String command =
-                env.get("FLINK_CDC_HOME")
-                        + "/bin/flink-cdc.sh -t yarn-application  "
-                        + "file://"
-                        + yamlScript.toAbsolutePath();
 
-        processBuilder.command(command);
-        processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-        processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+        List<String> commandList = new ArrayList<>();
+
+        commandList.add(env.get("FLINK_CDC_HOME") + "/bin/flink-cdc.sh");
+        commandList.add("-t");
+        commandList.add("yarn-application");
+        commandList.add(yamlScript.toAbsolutePath().toString());
+
+        processBuilder.command(commandList);
+        //        processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+        //        processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+        //        processBuilder.redirectErrorStream(true);
         LOG.info("starting flink-cdc task with flink on yarn-application");
         Process process = processBuilder.start();
         process.waitFor();
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        String line;
+        StringBuilder output = new StringBuilder();
+        while ((line = reader.readLine()) != null) {
+            System.out.println(line + "======");
+            output.append(line).append("\n");
+        }
         LOG.info("started flink-cdc task with flink on yarn-application");
     }
 
@@ -282,5 +250,10 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
 
     public static void main(String[] args) {
         startMiniYARNCluster();
+    }
+
+    @Test
+    public void t() throws IOException, InterruptedException {
+        submitPipelineJob("bbb");
     }
 }
