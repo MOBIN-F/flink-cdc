@@ -17,6 +17,7 @@
 
 package org.apache.flink.cdc.pipeline.tests;
 
+import org.apache.flink.cdc.common.test.utils.TestUtils;
 import org.apache.flink.cdc.connectors.mysql.testutils.MySqlContainer;
 import org.apache.flink.cdc.connectors.mysql.testutils.MySqlVersion;
 import org.apache.flink.cdc.connectors.mysql.testutils.UniqueDatabase;
@@ -31,6 +32,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
+
+import java.nio.file.Path;
 
 /** End-to-end tests for mysql cdc pipeline job. */
 // @RunWith(Parameterized.class)
@@ -103,10 +106,10 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
                         MYSQL_TEST_PASSWORD,
                         mysqlInventoryDatabase.getDatabaseName(),
                         1);
-        //        Path mysqlCdcJar = TestUtils.getResource("mysql-cdc-pipeline-connector.jar");
-        //        Path valuesCdcJar = TestUtils.getResource("values-cdc-pipeline-connector.jar");
-        //        Path mysqlDriverJar = TestUtils.getResource("mysql-driver.jar");
-        submitPipelineJob(pipelineJob);
+        Path mysqlCdcJar = TestUtils.getResource("mysql-cdc-pipeline-connector.jar");
+        Path valuesCdcJar = TestUtils.getResource("values-cdc-pipeline-connector.jar");
+        Path mysqlDriverJar = TestUtils.getResource("mysql-driver.jar");
+        submitPipelineJob(pipelineJob, mysqlCdcJar, valuesCdcJar, mysqlDriverJar);
         //        waitUntilJobRunning(Duration.ofSeconds(30));
         LOG.info("Pipeline job is running");
         Thread.sleep(300000);

@@ -161,20 +161,26 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         ProcessBuilder processBuilder = new ProcessBuilder();
         Map<String, String> env = getEnv();
         processBuilder.environment().putAll(getEnv());
-        Path yamlScript = temporaryFolder.newFile("mysql-to-kafka.yml").toPath();
+        Path yamlScript = temporaryFolder.newFile("mysql-to-values.yml").toPath();
         Files.write(yamlScript, pipelineJob.getBytes());
 
         List<String> commandList = new ArrayList<>();
+
+
 
         commandList.add(env.get("FLINK_CDC_HOME") + "/bin/flink-cdc.sh");
         commandList.add("-t");
         commandList.add("yarn-application");
         commandList.add(yamlScript.toAbsolutePath().toString());
+        for (Path jar : jars) {
+            commandList.add("--jar");
+            commandList.add(jar.toString());
+        }
 
         processBuilder.command(commandList);
-        //        processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-        //        processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
-        //        processBuilder.redirectErrorStream(true);
+//        processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+//        processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+//        processBuilder.redirectErrorStream(true);
         LOG.info("starting flink-cdc task with flink on yarn-application");
         Process process = processBuilder.start();
         process.waitFor();
