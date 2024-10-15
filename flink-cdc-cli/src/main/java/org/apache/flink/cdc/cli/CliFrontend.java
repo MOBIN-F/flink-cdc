@@ -80,7 +80,7 @@ public class CliFrontend {
                     "Missing pipeline definition file path in arguments. ");
         }
 
-        Path pipelineDefPath = new org.apache.flink.core.fs.Path(unparsedArgs.get(0));
+        Path pipelineDefPath = new Path(unparsedArgs.get(0));
         // Take the first unparsed argument as the pipeline definition file
         LOG.info("Real Path pipelineDefPath {}", pipelineDefPath);
         // Global pipeline configuration
@@ -99,7 +99,7 @@ public class CliFrontend {
                                 Optional.ofNullable(
                                                 commandLine.getOptionValues(CliFrontendOptions.JAR))
                                         .orElse(new String[0]))
-                        .map(org.apache.flink.core.fs.Path::new)
+                        .map(Path::new)
                         .collect(Collectors.toList());
 
         // Build executor

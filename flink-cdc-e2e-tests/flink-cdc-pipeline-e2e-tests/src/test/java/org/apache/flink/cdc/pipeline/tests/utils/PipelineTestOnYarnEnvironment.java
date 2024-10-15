@@ -20,11 +20,11 @@ package org.apache.flink.cdc.pipeline.tests.utils;
 import org.apache.flink.api.common.time.Deadline;
 import org.apache.flink.cdc.common.test.utils.TestUtils;
 import org.apache.flink.cdc.common.utils.Preconditions;
+import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.core.testutils.CommonTestUtils;
 import org.apache.flink.util.TestLogger;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.flink.yarn.YarnClusterDescriptor;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.Service;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -33,21 +33,31 @@ import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.MiniYARNCluster;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Rule;
-import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
-import java.io.*;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,7 +70,6 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
     protected static final YarnConfiguration YARN_CONFIGURATION;
     private YarnClient yarnClient = null;
     protected static MiniYARNCluster yarnCluster = null;
-    protected org.apache.flink.configuration.Configuration flinkConfiguration;
 
     protected static final String TEST_CLUSTER_NAME_KEY = "flink-yarn-minicluster-name";
     protected static final int NUM_NODEMANAGERS = 2;
@@ -97,13 +106,39 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         YARN_CONFIGURATION.setInt(YarnConfiguration.RESOURCEMANAGER_CONNECT_MAX_WAIT_MS, 5000);
         YARN_CONFIGURATION.set(TEST_CLUSTER_NAME_KEY, "flink-yarn-tests-application");
     }
-    // 54627
+
     @Before
-    public void before() throws Exception {
+    public void setupYarnClient() throws Exception {
         if (yarnClient == null) {
             yarnClient = YarnClient.createYarnClient();
             yarnClient.init(getYarnConfiguration());
             yarnClient.start();
+        }
+    }
+
+    @After
+    public void shutdownYarnClient() {
+        yarnClient.stop();
+    }
+
+    @AfterClass
+    public static void teardown() {
+
+        if (yarnCluster != null) {
+            LOG.info("Stopping MiniYarn Cluster");
+            yarnCluster.stop();
+            yarnCluster = null;
+        }
+
+        // Unset FLINK_CONF_DIR, as it might change the behavior of other tests
+        Map<String, String> map = new HashMap<>(System.getenv());
+        map.remove(ConfigConstants.ENV_FLINK_CONF_DIR);
+        map.remove("YARN_CONF_DIR");
+        map.remove("IN_TESTS");
+        CommonTestUtils.setEnv(map);
+
+        if (yarnSiteXML != null) {
+            yarnSiteXML.delete();
         }
     }
 
@@ -140,7 +175,6 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
             CommonTestUtils.setEnv(map);
 
             assertThat(yarnCluster.getServiceState()).isEqualTo(Service.STATE.STARTED);
-
             // wait for the nodeManagers to connect
             while (!yarnCluster.waitForNodeManagersToConnect(500)) {
                 LOG.info("Waiting for Nodemanagers to connect");
@@ -163,16 +197,10 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         }
     }
 
-    @After
-    public void after() {
-        yarnClient.stop();
-    }
-
-    public String submitPipelineJob(String pipelineJob, Path... jars)
-            throws Exception {
+    public String submitPipelineJob(String pipelineJob, Path... jars) throws Exception {
         ProcessBuilder processBuilder = new ProcessBuilder();
         Map<String, String> env = getEnv();
-        processBuilder.environment().putAll(getEnv());
+        processBuilder.environment().putAll(env);
         Path yamlScript = temporaryFolder.newFile("mysql-to-values.yml").toPath();
         Files.write(yamlScript, pipelineJob.getBytes());
 
@@ -190,24 +218,54 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         LOG.info("starting flink-cdc task with flink on yarn-application");
         Process process = processBuilder.start();
         process.waitFor();
-        String applicationId = getApplicationId(process);
-        Preconditions.checkNotNull(applicationId, "applicationId should not be null, pleease check logs");
-       // waitApplicationFinishedElseKillIt(applicationId, yarnAppTerminateTimeout, sleepIntervalInMS);
+        String applicationIdStr = getApplicationId(process);
+        Preconditions.checkNotNull(
+                applicationIdStr, "applicationId should not be null, please check logs");
+        ApplicationId applicationId = ApplicationId.fromString(applicationIdStr);
+        waitApplicationFinished(applicationId, yarnAppTerminateTimeout, sleepIntervalInMS);
         LOG.info("started flink-cdc task with flink on yarn-application");
-        return applicationId;
+        return applicationIdStr;
     }
 
     public Map<String, String> getEnv() {
-        Path flinkHome = Paths.get("target/flink-1.18.1");
+        Path flinkHome =
+                TestUtils.getResource(
+                        "flink-\\d+(\\.\\d+)*$",
+                        "flink-cdc-e2e-tests/flink-cdc-pipeline-e2e-tests/target");
         Map<String, String> env = new HashMap<>();
         env.put("FLINK_HOME", flinkHome.toString());
         env.put("FLINK_CONF_DIR", flinkHome.resolve("conf").toString());
+        addFlinkConf(flinkHome.resolve("conf").resolve("flink-conf.yaml"));
         Path flinkcdcHome =
-                Paths.get(
-                        "../../flink-cdc-dist/target/flink-cdc-3.3-SNAPSHOT-bin/flink-cdc-3.3-SNAPSHOT");
+                TestUtils.getResource("flink-cdc-\\d+(\\.\\d+)*(-SNAPSHOT)?$", "flink-cdc-dist");
         env.put("FLINK_CDC_HOME", flinkcdcHome.toString());
         env.put("HADOOP_CLASSPATH", getYarnClasspath());
         return env;
+    }
+
+    // TODO Maybe pipeline.yml should support adding flink conf
+    public void addFlinkConf(Path flinkConf) {
+        Map<String, String> configToAppend = new HashMap<>();
+        configToAppend.put("akka.ask.timeout", "100s");
+        configToAppend.put("web.timeout", "1000000");
+        configToAppend.put("taskmanager.slot.timeout", "1000s");
+        configToAppend.put("slot.request.timeout", "120000");
+        try {
+            if (!Files.exists(flinkConf)) {
+                throw new FileNotFoundException("flink-conf.yaml not found at " + flinkConf);
+            }
+            List<String> lines = new ArrayList<>(Files.readAllLines(flinkConf));
+            for (Map.Entry<String, String> entry : configToAppend.entrySet()) {
+                lines.add(entry.getKey() + ": " + entry.getValue());
+            }
+            Files.write(
+                    flinkConf,
+                    lines,
+                    StandardOpenOption.WRITE,
+                    StandardOpenOption.TRUNCATE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to append configuration to flink-conf.yaml", e);
+        }
     }
 
     public String getApplicationId(Process process) throws IOException {
@@ -222,11 +280,8 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         return null;
     }
 
-    protected void waitApplicationFinishedElseKillIt(
-            ApplicationId applicationId,
-            Duration timeout,
-            int sleepIntervalInMS)
-            throws Exception {
+    protected void waitApplicationFinished(
+            ApplicationId applicationId, Duration timeout, int sleepIntervalInMS) throws Exception {
         Deadline deadline = Deadline.now().plus(timeout);
         YarnApplicationState state =
                 getYarnClient().getApplicationReport(applicationId).getYarnApplicationState();
@@ -251,7 +306,6 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         return yarnClient;
     }
 
-
     /**
      * Searches for the yarn.classpath file generated by the "dependency:build-classpath" maven
      * plugin in "flink-yarn-tests".
@@ -261,8 +315,7 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
     private static String getYarnClasspath() {
         Path yarnClasspathFile = TestUtils.getResource("yarn.classpath");
         try {
-            return FileUtils.readFileToString(
-                    yarnClasspathFile.toFile(), StandardCharsets.UTF_8); // potential NPE is supposed to be fatal
+            return FileUtils.readFileToString(yarnClasspathFile.toFile(), StandardCharsets.UTF_8);
         } catch (Throwable t) {
             LOG.error(
                     "Error while getting YARN classpath in {}",

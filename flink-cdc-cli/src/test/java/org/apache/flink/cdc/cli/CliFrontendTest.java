@@ -118,6 +118,11 @@ class CliFrontendTest {
                         "kubernetes-application",
                         "-n");
         assertThat(executor.getDeploymentTarget()).isEqualTo("kubernetes-application");
+
+        executor =
+                createExecutor(
+                        pipelineDef(), "--flink-home", flinkHome(), "-t", "yarn-application", "-n");
+        assertThat(executor.getDeploymentTarget()).isEqualTo("yarn-application");
     }
 
     @Test

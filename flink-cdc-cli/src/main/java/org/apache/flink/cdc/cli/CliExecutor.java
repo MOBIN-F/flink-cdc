@@ -27,7 +27,8 @@ import org.apache.flink.cdc.composer.PipelineDeploymentExecutor;
 import org.apache.flink.cdc.composer.PipelineExecution;
 import org.apache.flink.cdc.composer.definition.PipelineDef;
 import org.apache.flink.cdc.composer.flink.FlinkPipelineComposer;
-import org.apache.flink.cdc.composer.flink.deployment.ComposeDeploymentFactory;
+import org.apache.flink.cdc.composer.flink.deployment.K8SApplicationDeploymentExecutor;
+import org.apache.flink.cdc.composer.flink.deployment.YarnApplicationDeploymentExecutor;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -35,6 +36,12 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.commons.cli.CommandLine;
 
 import java.util.List;
+
+import static org.apache.flink.cdc.composer.flink.deployment.ComposeDeployment.KUBERNETES_APPLICATION;
+import static org.apache.flink.cdc.composer.flink.deployment.ComposeDeployment.LOCAL;
+import static org.apache.flink.cdc.composer.flink.deployment.ComposeDeployment.REMOTE;
+import static org.apache.flink.cdc.composer.flink.deployment.ComposeDeployment.YARN_APPLICATION;
+import static org.apache.flink.cdc.composer.flink.deployment.ComposeDeployment.YARN_SESSION;
 
 /** Executor for doing the composing and submitting logic for {@link CliFrontend}. */
 public class CliExecutor {
@@ -69,31 +76,28 @@ public class CliExecutor {
         // Create Submit Executor to deployment flink cdc job Or Run Flink CDC Job
         String deploymentTarget = ConfigurationUtils.getDeploymentMode(commandLine);
         switch (deploymentTarget) {
-            case "yarn-application":
-            case "kubernetes-application":
-                return deployWithApplicationComposer();
-            case "local":
+            case KUBERNETES_APPLICATION:
+                return deployWithApplicationComposer(new K8SApplicationDeploymentExecutor());
+            case YARN_APPLICATION:
+                return deployWithApplicationComposer(new YarnApplicationDeploymentExecutor());
+            case LOCAL:
                 return deployWithLocalExecutor();
-            case "remote":
-            default:
+            case REMOTE:
+            case YARN_SESSION:
                 return deployWithRemoteExecutor();
+            default:
+                throw new IllegalArgumentException(
+                        String.format("Deployment target %s is not supported", deploymentTarget));
         }
     }
 
-    private PipelineExecution.ExecutionInfo deployWithApplicationComposer() throws Exception {
-        ComposeDeploymentFactory composeDeploymentFactory = new ComposeDeploymentFactory();
-        PipelineDeploymentExecutor composeExecutor =
-                composeDeploymentFactory.getFlinkComposeExecutor(commandLine);
+    private PipelineExecution.ExecutionInfo deployWithApplicationComposer(
+            PipelineDeploymentExecutor composeExecutor) throws Exception {
         return composeExecutor.deploy(
                 commandLine,
                 org.apache.flink.configuration.Configuration.fromMap(flinkConfig.toMap()),
                 additionalJars,
                 flinkHome);
-    }
-
-    @VisibleForTesting
-    public PipelineExecution.ExecutionInfo deployWithNoOpComposer() throws Exception {
-        return executePipeline(this.composer);
     }
 
     private PipelineExecution.ExecutionInfo deployWithLocalExecutor() throws Exception {
@@ -117,6 +121,12 @@ public class CliExecutor {
         return execution.execute();
     }
 
+    @VisibleForTesting
+    public PipelineExecution.ExecutionInfo deployWithNoOpComposer() throws Exception {
+        return executePipeline(this.composer);
+    }
+
+    // The main class for running application mode
     public static void main(String[] args) throws Exception {
         PipelineDefinitionParser pipelineDefinitionParser = new YamlPipelineDefinitionParser();
         org.apache.flink.core.fs.Path pipelineDefPath = new org.apache.flink.core.fs.Path(args[0]);

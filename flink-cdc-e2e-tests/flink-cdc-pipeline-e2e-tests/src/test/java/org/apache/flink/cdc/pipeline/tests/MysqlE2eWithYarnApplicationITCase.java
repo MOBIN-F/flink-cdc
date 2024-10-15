@@ -18,7 +18,6 @@
 package org.apache.flink.cdc.pipeline.tests;
 
 import org.apache.flink.cdc.common.test.utils.TestUtils;
-import org.apache.flink.cdc.common.utils.Preconditions;
 import org.apache.flink.cdc.connectors.mysql.testutils.MySqlContainer;
 import org.apache.flink.cdc.connectors.mysql.testutils.MySqlVersion;
 import org.apache.flink.cdc.connectors.mysql.testutils.UniqueDatabase;
@@ -26,9 +25,9 @@ import org.apache.flink.cdc.pipeline.tests.utils.PipelineTestOnYarnEnvironment;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
-import org.junit.jupiter.api.Disabled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.Network;
@@ -37,12 +36,14 @@ import org.testcontainers.shaded.org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,9 +59,7 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
     // ------------------------------------------------------------------------------------------
     protected static final String MYSQL_TEST_USER = "mysqluser";
     protected static final String MYSQL_TEST_PASSWORD = "mysqlpw";
-    protected static final String MYSQL_DRIVER_CLASS = "com.mysql.cj.jdbc.Driver";
     protected static final String INTER_CONTAINER_MYSQL_ALIAS = "mysql";
-    protected static final long EVENT_WAITING_TIMEOUT = 60000L;
 
     @ClassRule
     public static final MySqlContainer MYSQL =
@@ -79,16 +78,18 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
     protected final UniqueDatabase mysqlInventoryDatabase =
             new UniqueDatabase(MYSQL, "mysql_inventory", MYSQL_TEST_USER, MYSQL_TEST_PASSWORD);
 
+    @BeforeClass
+    public static void setup() {
+        startMiniYARNCluster();
+    }
+
     @Before
     public void before() throws Exception {
-        super.before();
         mysqlInventoryDatabase.createAndInitialize();
-        startMiniYARNCluster();
     }
 
     @After
     public void after() {
-        super.after();
         mysqlInventoryDatabase.dropDatabase();
     }
 
@@ -118,12 +119,14 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
                         MYSQL_TEST_PASSWORD,
                         mysqlInventoryDatabase.getDatabaseName(),
                         1);
-        Path mysqlCdcJar = TestUtils.getResource("mysql-cdc-pipeline-connector.jar", "flink-cdc-e2e-tests/flink-cdc-pipeline-e2e-tests/target/dependencies");
-        Path valuesCdcJar = TestUtils.getResource("values-cdc-pipeline-connector.jar", "flink-cdc-e2e-tests/flink-cdc-pipeline-e2e-tests/target/dependencies");
-        Path mysqlDriverJar = TestUtils.getResource("mysql-driver.jar", "flink-cdc-e2e-tests/flink-cdc-pipeline-e2e-tests/target/dependencies");
-        String applicationId = submitPipelineJob(pipelineJob, mysqlCdcJar, valuesCdcJar, mysqlDriverJar);
+        Path mysqlCdcJar = TestUtils.getResource("mysql-cdc-pipeline-connector.jar");
+        Path valuesCdcJar = TestUtils.getResource("values-cdc-pipeline-connector.jar");
+        Path mysqlDriverJar = TestUtils.getResource("mysql-driver.jar");
+        String applicationId =
+                submitPipelineJob(pipelineJob, mysqlCdcJar, valuesCdcJar, mysqlDriverJar);
         LOG.info("Pipeline job is running");
-        validateResult(applicationId,
+        validateResult(
+                applicationId,
                 "CreateTableEvent{tableId=%s.customers, schema=columns={`id` INT NOT NULL,`name` VARCHAR(255) NOT NULL 'flink',`address` VARCHAR(1024),`phone_number` VARCHAR(512)}, primaryKeys=id, options=()}",
                 "DataChangeEvent{tableId=%s.customers, before=[], after=[104, user_4, Shanghai, 123567891234], op=INSERT, meta=()}",
                 "DataChangeEvent{tableId=%s.customers, before=[], after=[103, user_3, Shanghai, 123567891234], op=INSERT, meta=()}",
@@ -139,32 +142,45 @@ public class MysqlE2eWithYarnApplicationITCase extends PipelineTestOnYarnEnviron
                 "DataChangeEvent{tableId=%s.products, before=[], after=[104, hammer, 12oz carpenter's hammer, 0.75, white, {\"key4\": \"value4\"}, {\"coordinates\":[4,4],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
                 "DataChangeEvent{tableId=%s.products, before=[], after=[101, scooter, Small 2-wheel scooter, 3.14, red, {\"key1\": \"value1\"}, {\"coordinates\":[1,1],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
                 "DataChangeEvent{tableId=%s.products, before=[], after=[102, car battery, 12V car battery, 8.1, white, {\"key2\": \"value2\"}, {\"coordinates\":[2,2],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}");
-
     }
 
-    private void validateResult(String applicationId,String... expectedEvents) {
-        List<String> expectedEventsList = Arrays.asList(expectedEvents);
-        List<String> taskManagerOutContent = getTaskManagerOutContent(applicationId);
+    private void validateResult(String applicationId, String... expectedEvents) {
         String dbName = mysqlInventoryDatabase.getDatabaseName();
-        for (int i = 0; i < expectedEventsList.size(); i++) {
-            String event = expectedEventsList.get(i);
-            event = String.format(event, dbName, dbName);
-            assertThat(taskManagerOutContent.get(i)).isEqualTo(event);
-        }
+        List<String> expectedEventsList =
+                Arrays.stream(expectedEvents)
+                        .map(event -> String.format(event, dbName, dbName))
+                        .collect(Collectors.toList());
+        List<String> taskManagerOutContent = getTaskManagerOutContent(applicationId);
+        assertThat(taskManagerOutContent).containsExactlyInAnyOrderElementsOf(expectedEventsList);
     }
 
-    private List<String> getTaskManagerOutContent(String applicationId) {
-        String containerId = applicationId.replace("application","container_") + "_01_000002";
-        Path resource = TestUtils.getResource(containerId, "flink-cdc-e2e-tests/flink-cdc-pipeline-e2e-tests/target/");
-        try(Stream<Path> taskManagerOutFilePath = Files.walk(resource)) {
-            Optional<File> taskManagerOutFile = taskManagerOutFilePath.filter(path -> path.toString().equals("taskmanager.out")).map(Path::toFile).findFirst();
+    public static List<String> getTaskManagerOutContent(String applicationId) {
+        Path resource =
+                TestUtils.getResource(
+                        YARN_CONFIGURATION.get(PipelineTestOnYarnEnvironment.TEST_CLUSTER_NAME_KEY),
+                        "flink-cdc-e2e-tests/flink-cdc-pipeline-e2e-tests/target");
+        try (Stream<Path> taskManagerOutFilePath = Files.walk(resource)) {
+            Optional<File> taskManagerOutFile =
+                    taskManagerOutFilePath
+                            .filter(
+                                    path ->
+                                            path.getFileName().toString().equals("taskmanager.out")
+                                                    && path.toString().contains(applicationId))
+                            .map(Path::toFile)
+                            .findFirst();
+
             if (taskManagerOutFile.isPresent()) {
                 return FileUtils.readLines(taskManagerOutFile.get(), Charset.defaultCharset());
             } else {
-                throw new FileNotFoundException(String.format("taskmanager.out is not existed for %s", applicationId));
+                throw new FileNotFoundException(
+                        String.format("taskmanager.out is not existed for %s", applicationId));
             }
-        } catch (Exception e) {
-            throw new RuntimeException(String.format("Could not search for %s directory.", containerId));
+        } catch (IOException e) {
+            throw new RuntimeException(
+                    String.format(
+                            "Could not search for %s directory.",
+                            YARN_CONFIGURATION.get(
+                                    PipelineTestOnYarnEnvironment.TEST_CLUSTER_NAME_KEY)));
         }
     }
 }

@@ -73,7 +73,7 @@ class ConfigurationUtilsTest {
     @ValueSource(strings = {"flink-home/conf/config.yaml", "flink-home/conf/flink-conf.yaml"})
     void loadConfigFile(String resourcePath) throws Exception {
         URL resource = Resources.getResource(resourcePath);
-        org.apache.flink.core.fs.Path path = new Path(resource.toURI());
+        Path path = new Path(resource.toURI());
         Configuration configuration =
                 ConfigurationUtils.loadConfigFile(path, resourcePath.endsWith("flink-conf.yaml"));
         Map<String, String> configMap = configuration.toMap();
