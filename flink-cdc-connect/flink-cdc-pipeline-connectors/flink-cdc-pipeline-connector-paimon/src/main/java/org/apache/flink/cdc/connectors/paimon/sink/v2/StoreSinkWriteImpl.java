@@ -142,6 +142,11 @@ public class StoreSinkWriteImpl implements StoreSinkWrite {
     }
 
     @Override
+    public void withInsertOnly(boolean insertOnly) {
+        write.withInsertOnly(insertOnly);
+    }
+
+    @Override
     public SinkRecord write(InternalRow internalRow) throws Exception {
         return write.writeAndReturn(internalRow);
     }
