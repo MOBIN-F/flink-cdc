@@ -428,6 +428,7 @@ public class PaimonMetadataApplierTest {
         Map<String, String> tableOptions = new HashMap<>();
         tableOptions.put("bucket", "-1");
         tableOptions.put("num-sorted-run.stop-trigger", "2147483647");
+        tableOptions.put("compaction.min.file-num", "10");
 
         MetadataApplier metadataApplier =
                 new PaimonMetadataApplier(
@@ -491,7 +492,6 @@ public class PaimonMetadataApplierTest {
 
         // alter table options and alter/add columns
         tableOptions.put("snapshot.num-retained.max", "99");
-        // TODO: support remove table option
         tableOptions.remove("num-sorted-run.stop-trigger");
         metadataApplier =
                 new PaimonMetadataApplier(
@@ -514,7 +514,6 @@ public class PaimonMetadataApplierTest {
         Assertions.assertEquals(Collections.singletonList("col1"), tableNew.primaryKeys());
         Assertions.assertEquals("-1", tableNew.options().get("bucket"));
         Assertions.assertEquals("99", tableNew.options().get("snapshot.num-retained.max"));
-        // TODO: support remove table option
-        // Assertions.assertNull(tableNew.options().get("num-sorted-run.stop-trigger"));
+        Assertions.assertNull(tableNew.options().get("num-sorted-run.stop-trigger"));
     }
 }
