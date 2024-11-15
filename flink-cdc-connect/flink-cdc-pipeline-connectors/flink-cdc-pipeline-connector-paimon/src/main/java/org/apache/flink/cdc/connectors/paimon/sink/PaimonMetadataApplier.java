@@ -163,13 +163,13 @@ public class PaimonMetadataApplier implements MetadataApplier {
 
     private void applyCreateTable(CreateTableEvent event) throws SchemaEvolveException {
         try {
-            if (!catalog.databaseExists(event.tableId().getSchemaName())) {
+            if (catalog.getDatabase(event.tableId().getSchemaName()) == null) {
                 catalog.createDatabase(event.tableId().getSchemaName(), true);
             }
             Identifier identifier =
                     new Identifier(event.tableId().getSchemaName(), event.tableId().getTableName());
 
-            if (catalog.tableExists(identifier)) {
+            if (catalog.getTable(identifier) == null) {
                 applyAlterTableOptions(identifier);
                 if (!ignoreIncompatibleOnRestart) {
                     checkColumnsCompatibility(event, identifier);
@@ -187,14 +187,22 @@ public class PaimonMetadataApplier implements MetadataApplier {
                                                         DataTypeUtils.toFlinkDataType(
                                                                         column.getType())
                                                                 .getLogicalType())));
-                builder.primaryKey(schema.primaryKeys().toArray(new String[0]));
+                List<String> partitionKeys = new ArrayList<>();
+                List<String> primaryKeys = schema.primaryKeys();
                 if (partitionMaps.containsKey(event.tableId())) {
-                    builder.partitionKeys(partitionMaps.get(event.tableId()));
+                    partitionKeys.addAll(partitionMaps.get(event.tableId()));
                 } else if (schema.partitionKeys() != null && !schema.partitionKeys().isEmpty()) {
-                    builder.partitionKeys(schema.partitionKeys());
+                    partitionKeys.addAll(schema.partitionKeys());
                 }
-                builder.options(tableOptions);
-                builder.options(schema.options());
+                for (String partitionColumn : partitionKeys) {
+                    if (!primaryKeys.contains(partitionColumn)) {
+                        primaryKeys.add(partitionColumn);
+                    }
+                }
+                builder.partitionKeys(partitionKeys)
+                        .primaryKey(primaryKeys)
+                        .options(tableOptions)
+                        .options(schema.options());
                 catalog.createTable(
                         new Identifier(
                                 event.tableId().getSchemaName(), event.tableId().getTableName()),
