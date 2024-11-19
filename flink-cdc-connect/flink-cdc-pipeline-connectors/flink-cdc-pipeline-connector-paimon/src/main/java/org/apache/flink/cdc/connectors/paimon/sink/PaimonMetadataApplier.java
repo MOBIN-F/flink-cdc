@@ -163,13 +163,13 @@ public class PaimonMetadataApplier implements MetadataApplier {
 
     private void applyCreateTable(CreateTableEvent event) throws SchemaEvolveException {
         try {
-            if (catalog.getDatabase(event.tableId().getSchemaName()) == null) {
+            if (!getDatabaseExists(event.tableId().getSchemaName())) {
                 catalog.createDatabase(event.tableId().getSchemaName(), true);
             }
             Identifier identifier =
                     new Identifier(event.tableId().getSchemaName(), event.tableId().getTableName());
 
-            if (catalog.getTable(identifier) == null) {
+            if (getTableExists(identifier)) {
                 applyAlterTableOptions(identifier);
                 if (!ignoreIncompatibleOnRestart) {
                     checkColumnsCompatibility(event, identifier);
@@ -214,6 +214,22 @@ public class PaimonMetadataApplier implements MetadataApplier {
                 | Catalog.DatabaseAlreadyExistException
                 | Catalog.TableNotExistException e) {
             throw new SchemaEvolveException(event, e.getMessage(), e);
+        }
+    }
+
+    boolean getTableExists(Identifier identifier) {
+        try {
+            return catalog.getTable(identifier) != null;
+        } catch (Catalog.TableNotExistException e) {
+            return false;
+        }
+    }
+
+    boolean getDatabaseExists(String databaseName) {
+        try {
+            return catalog.getDatabase(databaseName) != null;
+        } catch (Catalog.DatabaseNotExistException e) {
+            return false;
         }
     }
 
