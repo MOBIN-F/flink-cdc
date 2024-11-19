@@ -203,6 +203,7 @@ public class PaimonMetadataApplier implements MetadataApplier {
                         .primaryKey(primaryKeys)
                         .options(tableOptions)
                         .options(schema.options());
+                builder.comment(schema.comment());
                 catalog.createTable(
                         new Identifier(
                                 event.tableId().getSchemaName(), event.tableId().getTableName()),
