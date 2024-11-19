@@ -272,4 +272,13 @@ public class MySqlDataSourceOptions {
                                     + "The difference between scan.newly-added-table.enabled and scan.binlog.newly-added-table.enabled options is: \n"
                                     + "scan.newly-added-table.enabled: do re-snapshot & binlog-reading for newly added table when restored; \n"
                                     + "scan.binlog.newly-added-table.enabled: only do binlog-reading for newly added table during binlog reading phase.");
+
+    @Experimental
+    public static final ConfigOption<Boolean> INCLUDE_COMMENTS_ENABLED =
+            ConfigOptions.key("include-comments.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Whether enable include table and column comments, by default is false, if set to true, table and column comments will be sent. "
+                                    + "Note: Enable this option will bring the implications on memory usage.");
 }
