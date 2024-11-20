@@ -421,6 +421,7 @@ public class PreTransformOperator extends AbstractStreamOperator<Event>
         } else {
             schemaBuilder.options(schema.options());
         }
+        schemaBuilder.comment(schema.comment());
         return schemaBuilder.build();
     }
 

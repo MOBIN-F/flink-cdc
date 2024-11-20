@@ -281,6 +281,12 @@ public class TransformParser {
         Map<String, DataType> rawDataTypeMap =
                 columns.stream().collect(Collectors.toMap(Column::getName, Column::getType));
 
+        Map<String, String> rawDataCommentMap =
+                columns.stream()
+                        .filter(column -> column.getComment() != null)
+                        .collect(
+                                Collectors.toMap(Column::getName, column1 -> column1.getComment()));
+
         Map<String, Boolean> isNotNullMap =
                 columns.stream()
                         .collect(
@@ -320,11 +326,13 @@ public class TransformParser {
                                             transformOptional.get().toString(),
                                             JaninoCompiler.translateSqlNodeToJaninoExpression(
                                                     transformOptional.get(), udfDescriptors),
-                                            parseColumnNameList(transformOptional.get()))
+                                            parseColumnNameList(transformOptional.get()),
+                                            null)
                                     : ProjectionColumn.of(
                                             columnName,
                                             DataTypeConverter.convertCalciteRelDataTypeToDataType(
-                                                    relDataTypeMap.get(columnName)));
+                                                    relDataTypeMap.get(columnName)),
+                                            null);
                     boolean hasReplacedDuplicateColumn = false;
                     for (int i = 0; i < projectionColumns.size(); i++) {
                         if (projectionColumns.get(i).getColumnName().equals(columnName)
@@ -347,8 +355,10 @@ public class TransformParser {
                 SqlIdentifier sqlIdentifier = (SqlIdentifier) sqlNode;
                 String columnName = sqlIdentifier.names.get(sqlIdentifier.names.size() - 1);
                 DataType columnType;
+                String columnComment = null;
                 if (rawDataTypeMap.containsKey(columnName)) {
                     columnType = rawDataTypeMap.get(columnName);
+                    columnComment = rawDataCommentMap.get(columnName);
                 } else if (relDataTypeMap.containsKey(columnName)) {
                     columnType =
                             DataTypeConverter.convertCalciteRelDataTypeToDataType(
@@ -365,7 +375,8 @@ public class TransformParser {
                                     columnType.notNull(),
                                     columnName,
                                     columnName,
-                                    Arrays.asList(columnName)));
+                                    Arrays.asList(columnName),
+                                    columnComment));
                 } else {
                     // Calcite translated column type doesn't keep nullability.
                     // Appending it manually to circumvent this problem.
@@ -374,7 +385,8 @@ public class TransformParser {
                                     columnName,
                                     isNotNullMap.get(columnName)
                                             ? columnType.notNull()
-                                            : columnType.nullable()));
+                                            : columnType.nullable(),
+                                    columnComment));
                 }
             } else {
                 throw new ParseException("Unrecognized projection: " + sqlNode.toString());

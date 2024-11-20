@@ -21,6 +21,8 @@ import org.apache.flink.cdc.common.schema.Column;
 import org.apache.flink.cdc.common.types.DataType;
 import org.apache.flink.cdc.common.utils.StringUtils;
 
+import javax.annotation.Nullable;
+
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
@@ -96,8 +98,10 @@ public class ProjectionColumn implements Serializable {
         return !StringUtils.isNullOrWhitespaceOnly(scriptExpression);
     }
 
-    public static ProjectionColumn of(String columnName, DataType dataType) {
-        return new ProjectionColumn(Column.physicalColumn(columnName, dataType), null, null, null);
+    public static ProjectionColumn of(
+            String columnName, DataType dataType, @Nullable String columnComment) {
+        return new ProjectionColumn(
+                Column.physicalColumn(columnName, dataType, columnComment), null, null, null);
     }
 
     public static ProjectionColumn of(
@@ -105,9 +109,10 @@ public class ProjectionColumn implements Serializable {
             DataType dataType,
             String expression,
             String scriptExpression,
-            List<String> originalColumnNames) {
+            List<String> originalColumnNames,
+            @Nullable String columnComment) {
         return new ProjectionColumn(
-                Column.physicalColumn(columnName, dataType),
+                Column.physicalColumn(columnName, dataType, columnComment),
                 expression,
                 scriptExpression,
                 originalColumnNames);
