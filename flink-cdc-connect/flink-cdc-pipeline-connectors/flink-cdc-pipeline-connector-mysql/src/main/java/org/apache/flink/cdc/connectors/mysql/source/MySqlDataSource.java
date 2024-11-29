@@ -47,7 +47,7 @@ public class MySqlDataSource implements DataSource {
                 new MySqlEventDeserializer(
                         DebeziumChangelogMode.ALL,
                         sourceConfig.isIncludeSchemaChanges(),
-                        sourceConfig.isIncludeSchema());
+                        sourceConfig.isIncludeColumnType());
 
         MySqlSource<Event> source =
                 new MySqlSource<>(
