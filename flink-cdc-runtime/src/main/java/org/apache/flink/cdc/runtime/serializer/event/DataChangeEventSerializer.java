@@ -51,6 +51,7 @@ public class DataChangeEventSerializer extends TypeSerializerSingleton<DataChang
     private final EnumSerializer<OperationType> opSerializer =
             new EnumSerializer<>(OperationType.class);
     private final RecordDataSerializer recordDataSerializer = RecordDataSerializer.INSTANCE;
+    private final StringSerializer stringSerializer = StringSerializer.INSTANCE;
 
     @Override
     public DataChangeEvent createInstance() {
@@ -70,7 +71,9 @@ public class DataChangeEventSerializer extends TypeSerializerSingleton<DataChang
         }
         metaSerializer.serialize(event.meta(), target);
 
-        target.writeUTF(event.getSchema());
+        if (event.getSchema() == null) {
+            stringSerializer.serialize(event.getSchema(), target);
+        }
     }
 
     @Override
@@ -84,25 +87,26 @@ public class DataChangeEventSerializer extends TypeSerializerSingleton<DataChang
                         tableId,
                         recordDataSerializer.deserialize(source),
                         metaSerializer.deserialize(source),
-                        source.readUTF());
+                        stringSerializer.deserialize(source));
             case INSERT:
                 return DataChangeEvent.insertEvent(
                         tableId,
                         recordDataSerializer.deserialize(source),
                         metaSerializer.deserialize(source),
-                        source.readUTF());
+                        stringSerializer.deserialize(source));
             case UPDATE:
                 return DataChangeEvent.updateEvent(
                         tableId,
                         recordDataSerializer.deserialize(source),
                         recordDataSerializer.deserialize(source),
                         metaSerializer.deserialize(source),
-                        source.readUTF());
+                        stringSerializer.deserialize(source));
             case REPLACE:
                 return DataChangeEvent.replaceEvent(
                         tableId,
                         recordDataSerializer.deserialize(source),
-                        metaSerializer.deserialize(source));
+                        metaSerializer.deserialize(source),
+                        stringSerializer.deserialize(source));
             default:
                 throw new IllegalArgumentException("Unsupported data change event: " + op);
         }
@@ -123,25 +127,26 @@ public class DataChangeEventSerializer extends TypeSerializerSingleton<DataChang
                         tableIdSerializer.copy(from.tableId()),
                         recordDataSerializer.copy(from.before()),
                         metaSerializer.copy(from.meta()),
-                        from.getSchema());
+                        stringSerializer.copy(from.getSchema()));
             case INSERT:
                 return DataChangeEvent.insertEvent(
                         tableIdSerializer.copy(from.tableId()),
                         recordDataSerializer.copy(from.after()),
                         metaSerializer.copy(from.meta()),
-                        from.getSchema());
+                        stringSerializer.copy(from.getSchema()));
             case UPDATE:
                 return DataChangeEvent.updateEvent(
                         tableIdSerializer.copy(from.tableId()),
                         recordDataSerializer.copy(from.before()),
                         recordDataSerializer.copy(from.after()),
                         metaSerializer.copy(from.meta()),
-                        from.getSchema());
+                        stringSerializer.copy(from.getSchema()));
             case REPLACE:
                 return DataChangeEvent.replaceEvent(
                         tableIdSerializer.copy(from.tableId()),
                         recordDataSerializer.copy(from.after()),
-                        metaSerializer.copy(from.meta()));
+                        metaSerializer.copy(from.meta()),
+                        stringSerializer.copy(from.getSchema()));
             default:
                 throw new IllegalArgumentException("Unsupported data change event: " + op);
         }
