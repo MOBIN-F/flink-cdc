@@ -188,6 +188,14 @@ public class DataChangeEvent implements ChangeEvent, Serializable {
     }
 
     /**
+     * Creates a {@link DataChangeEvent} instance that describes the replace event with meta info.
+     */
+    public static DataChangeEvent replaceEvent(
+            TableId tableId, RecordData after, Map<String, String> meta, String columnType) {
+        return new DataChangeEvent(tableId, null, after, OperationType.REPLACE, meta, columnType);
+    }
+
+    /**
      * Updates the before of a {@link DataChangeEvent} instance that describes the event with meta
      * info.
      */
