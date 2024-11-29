@@ -133,12 +133,17 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
             return dataChangeEvent;
         } else if (op == Envelope.Operation.DELETE) {
             RecordData before = extractBeforeDataRecord(value, valueSchema);
-            return Collections.singletonList(
-                    DataChangeEvent.deleteEvent(
-                            tableId,
-                            before,
-                            meta,
-                            jsonConverter.asJsonSchema(valueSchema).toString()));
+            List<DataChangeEvent> dataChangeEvent =
+                    includeColumnType
+                            ? Collections.singletonList(
+                                    DataChangeEvent.deleteEvent(
+                                            tableId,
+                                            before,
+                                            meta,
+                                            jsonConverter.asJsonSchema(valueSchema).toString()))
+                            : Collections.singletonList(
+                                    DataChangeEvent.deleteEvent(tableId, before, meta));
+            return dataChangeEvent;
         } else if (op == Envelope.Operation.UPDATE) {
             RecordData after = extractAfterDataRecord(value, valueSchema);
             if (changelogMode == DebeziumChangelogMode.ALL) {
