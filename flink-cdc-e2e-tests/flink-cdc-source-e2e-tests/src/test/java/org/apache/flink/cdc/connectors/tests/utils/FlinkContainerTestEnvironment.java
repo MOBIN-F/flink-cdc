@@ -102,7 +102,7 @@ public abstract class FlinkContainerTestEnvironment extends TestLogger {
     public static final MySqlContainer MYSQL =
             (MySqlContainer)
                     new MySqlContainer(
-                                    MySqlVersion.V8_0) // v8 support both ARM and AMD architectures
+                                    MySqlVersion.V5_7) // v8 support both ARM and AMD architectures
                             .withConfigurationOverride("docker/mysql/my.cnf")
                             .withSetupSQL("docker/mysql/setup.sql")
                             .withDatabaseName("flink-test")

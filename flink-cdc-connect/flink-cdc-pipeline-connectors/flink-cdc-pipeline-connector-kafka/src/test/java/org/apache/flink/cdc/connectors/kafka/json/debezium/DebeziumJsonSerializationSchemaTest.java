@@ -40,7 +40,9 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMap
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.time.ZoneId;
+import java.util.Collections;
 
 /** Tests for {@link DebeziumJsonSerializationSchema}. */
 public class DebeziumJsonSerializationSchemaTest {
@@ -57,7 +59,8 @@ public class DebeziumJsonSerializationSchemaTest {
                 ChangeLogJsonFormatFactory.createSerializationSchema(
                         new Configuration(),
                         JsonSerializationType.DEBEZIUM_JSON,
-                        ZoneId.systemDefault());
+                        ZoneId.systemDefault(),
+                        false);
         serializationSchema.open(new MockInitializationContext());
         // create table
         Schema schema =
@@ -70,6 +73,18 @@ public class DebeziumJsonSerializationSchemaTest {
         Assertions.assertNull(serializationSchema.serialize(createTableEvent));
         BinaryRecordDataGenerator generator =
                 new BinaryRecordDataGenerator(RowType.of(DataTypes.STRING(), DataTypes.STRING()));
+        //        com.fasterxml.jackson.databind.ObjectMapper objectMapper = new
+        // com.fasterxml.jackson.databind.ObjectMapper();
+        //        com.fasterxml.jackson.databind.node.ObjectNode objectNode =
+        // objectMapper.createObjectNode();
+        String json =
+                "{\"type\":\"struct\",\"fields\":[{\"type\":\"int64\",\"optional\":false,\"field\":\"id\"},{\"type\":\"int64\",\"optional\":true,\"field\":\"a1\"},{\"type\":\"int64\",\"optional\":true,\"field\":\"a2\"},{\"type\":\"string\",\"optional\":true,\"field\":\"str\"}],\"optional\":true,\"name\":\"mysql_binlog_source.dw_app.cdc_sink3.Value\"}";
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper1 =
+                new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.JsonNode jsonNode =
+                mapper1.readTree(new File("D:\\json.txt"));
+
         // insert
         DataChangeEvent insertEvent1 =
                 DataChangeEvent.insertEvent(
@@ -78,7 +93,9 @@ public class DebeziumJsonSerializationSchemaTest {
                                 new Object[] {
                                     BinaryStringData.fromString("1"),
                                     BinaryStringData.fromString("1")
-                                }));
+                                }),
+                        Collections.emptyMap());
+
         JsonNode expected =
                 mapper.readTree(
                         "{\"before\":null,\"after\":{\"col1\":\"1\",\"col2\":\"1\"},\"op\":\"c\",\"source\":{\"db\":\"default_schema\",\"table\":\"table1\"}}");

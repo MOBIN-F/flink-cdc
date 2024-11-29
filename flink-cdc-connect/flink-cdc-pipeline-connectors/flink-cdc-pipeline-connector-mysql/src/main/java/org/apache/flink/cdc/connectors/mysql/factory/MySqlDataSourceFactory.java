@@ -57,6 +57,7 @@ import java.util.stream.Collectors;
 import static org.apache.flink.cdc.connectors.mysql.source.MySqlDataSourceOptions.CHUNK_KEY_EVEN_DISTRIBUTION_FACTOR_LOWER_BOUND;
 import static org.apache.flink.cdc.connectors.mysql.source.MySqlDataSourceOptions.CHUNK_KEY_EVEN_DISTRIBUTION_FACTOR_UPPER_BOUND;
 import static org.apache.flink.cdc.connectors.mysql.source.MySqlDataSourceOptions.CHUNK_META_GROUP_SIZE;
+import static org.apache.flink.cdc.connectors.mysql.source.MySqlDataSourceOptions.COLUMN_TYPE_ENABLE;
 import static org.apache.flink.cdc.connectors.mysql.source.MySqlDataSourceOptions.CONNECTION_POOL_SIZE;
 import static org.apache.flink.cdc.connectors.mysql.source.MySqlDataSourceOptions.CONNECT_MAX_RETRIES;
 import static org.apache.flink.cdc.connectors.mysql.source.MySqlDataSourceOptions.CONNECT_TIMEOUT;
@@ -117,6 +118,7 @@ public class MySqlDataSourceFactory implements DataSourceFactory {
         StartupOptions startupOptions = getStartupOptions(config);
 
         boolean includeSchemaChanges = config.get(SCHEMA_CHANGE_ENABLED);
+        boolean includeColumnType = config.get(COLUMN_TYPE_ENABLE);
 
         int fetchSize = config.get(SCAN_SNAPSHOT_FETCH_SIZE);
         int splitSize = config.get(SCAN_INCREMENTAL_SNAPSHOT_CHUNK_SIZE);
@@ -168,6 +170,7 @@ public class MySqlDataSourceFactory implements DataSourceFactory {
                         .connectionPoolSize(connectionPoolSize)
                         .closeIdleReaders(closeIdleReaders)
                         .includeSchemaChanges(includeSchemaChanges)
+                        .includeColumnType(includeColumnType)
                         .debeziumProperties(getDebeziumProperties(configMap))
                         .jdbcProperties(getJdbcProperties(configMap))
                         .scanNewlyAddedTableEnabled(scanNewlyAddedTableEnabled);

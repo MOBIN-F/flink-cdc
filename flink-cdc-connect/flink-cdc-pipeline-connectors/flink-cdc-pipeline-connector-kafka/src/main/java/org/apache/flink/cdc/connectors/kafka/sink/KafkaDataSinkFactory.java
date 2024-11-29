@@ -40,6 +40,7 @@ import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.KE
 import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.PARTITION_STRATEGY;
 import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.PROPERTIES_PREFIX;
 import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.SINK_ADD_TABLEID_TO_HEADER_ENABLED;
+import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.SINK_COLUMN_TYPE_ENABLE;
 import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.SINK_CUSTOM_HEADER;
 import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.TOPIC;
 import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.VALUE_FORMAT;
@@ -67,13 +68,14 @@ public class KafkaDataSinkFactory implements DataSinkFactory {
                                     .get(PipelineOptions.PIPELINE_LOCAL_TIME_ZONE));
         }
         KeyFormat keyFormat = context.getFactoryConfiguration().get(KEY_FORMAT);
+        Boolean includeColumnType = context.getFactoryConfiguration().get(SINK_COLUMN_TYPE_ENABLE);
         SerializationSchema<Event> keySerialization =
                 KeySerializationFactory.createSerializationSchema(configuration, keyFormat, zoneId);
         JsonSerializationType jsonSerializationType =
                 context.getFactoryConfiguration().get(KafkaDataSinkOptions.VALUE_FORMAT);
         SerializationSchema<Event> valueSerialization =
                 ChangeLogJsonFormatFactory.createSerializationSchema(
-                        configuration, jsonSerializationType, zoneId);
+                        configuration, jsonSerializationType, zoneId, includeColumnType);
         final Properties kafkaProperties = new Properties();
         Map<String, String> allOptions = context.getFactoryConfiguration().toMap();
         allOptions.keySet().stream()
@@ -123,6 +125,7 @@ public class KafkaDataSinkFactory implements DataSinkFactory {
         options.add(TOPIC);
         options.add(SINK_ADD_TABLEID_TO_HEADER_ENABLED);
         options.add(SINK_CUSTOM_HEADER);
+        options.add(SINK_COLUMN_TYPE_ENABLE);
         options.add(KafkaDataSinkOptions.DELIVERY_GUARANTEE);
         return options;
     }

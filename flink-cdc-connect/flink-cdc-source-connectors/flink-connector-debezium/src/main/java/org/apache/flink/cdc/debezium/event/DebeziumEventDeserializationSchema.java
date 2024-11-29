@@ -51,7 +51,10 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.apache.kafka.connect.storage.ConverterConfig;
+import org.apache.kafka.connect.storage.ConverterType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,6 +62,7 @@ import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -82,10 +86,17 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
     /** Changelog Mode to use for encoding changes in Flink internal data structure. */
     protected final DebeziumChangelogMode changelogMode;
 
+    private transient JsonConverter jsonConverter;
+
+    private final boolean includeColumnType;
+
     public DebeziumEventDeserializationSchema(
-            SchemaDataTypeInference schemaDataTypeInference, DebeziumChangelogMode changelogMode) {
+            SchemaDataTypeInference schemaDataTypeInference,
+            DebeziumChangelogMode changelogMode,
+            boolean includeColumnType) {
         this.schemaDataTypeInference = schemaDataTypeInference;
         this.changelogMode = changelogMode;
+        this.includeColumnType = includeColumnType;
     }
 
     @Override
@@ -102,21 +113,61 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
         Schema valueSchema = record.valueSchema();
         Map<String, String> meta = getMetadata(record);
 
+        if (includeColumnType) {
+            if (jsonConverter == null) {
+                initializeJsonConverter();
+            }
+        }
         if (op == Envelope.Operation.CREATE || op == Envelope.Operation.READ) {
             RecordData after = extractAfterDataRecord(value, valueSchema);
-            return Collections.singletonList(DataChangeEvent.insertEvent(tableId, after, meta));
+            List<DataChangeEvent> dataChangeEvent =
+                    includeColumnType
+                            ? Collections.singletonList(
+                                    DataChangeEvent.insertEvent(
+                                            tableId,
+                                            after,
+                                            meta,
+                                            jsonConverter.asJsonSchema(valueSchema).toString()))
+                            : Collections.singletonList(
+                                    DataChangeEvent.insertEvent(tableId, after, meta));
+            return dataChangeEvent;
         } else if (op == Envelope.Operation.DELETE) {
             RecordData before = extractBeforeDataRecord(value, valueSchema);
-            return Collections.singletonList(DataChangeEvent.deleteEvent(tableId, before, meta));
+            return Collections.singletonList(
+                    DataChangeEvent.deleteEvent(
+                            tableId,
+                            before,
+                            meta,
+                            jsonConverter.asJsonSchema(valueSchema).toString()));
         } else if (op == Envelope.Operation.UPDATE) {
             RecordData after = extractAfterDataRecord(value, valueSchema);
             if (changelogMode == DebeziumChangelogMode.ALL) {
                 RecordData before = extractBeforeDataRecord(value, valueSchema);
-                return Collections.singletonList(
-                        DataChangeEvent.updateEvent(tableId, before, after, meta));
+                List<DataChangeEvent> dataChangeEvent =
+                        includeColumnType
+                                ? Collections.singletonList(
+                                        DataChangeEvent.updateEvent(
+                                                tableId,
+                                                before,
+                                                after,
+                                                meta,
+                                                jsonConverter.asJsonSchema(valueSchema).toString()))
+                                : Collections.singletonList(
+                                        DataChangeEvent.updateEvent(tableId, before, after, meta));
+                return dataChangeEvent;
             }
-            return Collections.singletonList(
-                    DataChangeEvent.updateEvent(tableId, null, after, meta));
+            List<DataChangeEvent> dataChangeEvent =
+                    includeColumnType
+                            ? Collections.singletonList(
+                                    DataChangeEvent.updateEvent(
+                                            tableId,
+                                            null,
+                                            after,
+                                            meta,
+                                            jsonConverter.asJsonSchema(valueSchema).toString()))
+                            : Collections.singletonList(
+                                    DataChangeEvent.updateEvent(tableId, null, after, meta));
+            return dataChangeEvent;
         } else {
             LOG.trace("Received {} operation, skip", op);
             return Collections.emptyList();
@@ -147,6 +198,14 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
 
     private DeserializationRuntimeConverter getOrCreateConverter(DataType type) {
         return CONVERTERS.computeIfAbsent(type, this::createConverter);
+    }
+
+    private void initializeJsonConverter() {
+        jsonConverter = new JsonConverter();
+        final HashMap<String, Object> configs = new HashMap<>(2);
+        configs.put(ConverterConfig.TYPE_CONFIG, ConverterType.VALUE.getName());
+        //        configs.put(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, true);
+        jsonConverter.configure(configs);
     }
 
     // -------------------------------------------------------------------------------------

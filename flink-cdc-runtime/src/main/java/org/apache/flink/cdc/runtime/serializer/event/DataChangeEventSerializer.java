@@ -69,6 +69,8 @@ public class DataChangeEventSerializer extends TypeSerializerSingleton<DataChang
             recordDataSerializer.serialize(event.after(), target);
         }
         metaSerializer.serialize(event.meta(), target);
+
+        target.writeUTF(event.getSchema());
     }
 
     @Override
@@ -81,18 +83,21 @@ public class DataChangeEventSerializer extends TypeSerializerSingleton<DataChang
                 return DataChangeEvent.deleteEvent(
                         tableId,
                         recordDataSerializer.deserialize(source),
-                        metaSerializer.deserialize(source));
+                        metaSerializer.deserialize(source),
+                        source.readUTF());
             case INSERT:
                 return DataChangeEvent.insertEvent(
                         tableId,
                         recordDataSerializer.deserialize(source),
-                        metaSerializer.deserialize(source));
+                        metaSerializer.deserialize(source),
+                        source.readUTF());
             case UPDATE:
                 return DataChangeEvent.updateEvent(
                         tableId,
                         recordDataSerializer.deserialize(source),
                         recordDataSerializer.deserialize(source),
-                        metaSerializer.deserialize(source));
+                        metaSerializer.deserialize(source),
+                        source.readUTF());
             case REPLACE:
                 return DataChangeEvent.replaceEvent(
                         tableId,
@@ -117,18 +122,21 @@ public class DataChangeEventSerializer extends TypeSerializerSingleton<DataChang
                 return DataChangeEvent.deleteEvent(
                         tableIdSerializer.copy(from.tableId()),
                         recordDataSerializer.copy(from.before()),
-                        metaSerializer.copy(from.meta()));
+                        metaSerializer.copy(from.meta()),
+                        from.getSchema());
             case INSERT:
                 return DataChangeEvent.insertEvent(
                         tableIdSerializer.copy(from.tableId()),
                         recordDataSerializer.copy(from.after()),
-                        metaSerializer.copy(from.meta()));
+                        metaSerializer.copy(from.meta()),
+                        from.getSchema());
             case UPDATE:
                 return DataChangeEvent.updateEvent(
                         tableIdSerializer.copy(from.tableId()),
                         recordDataSerializer.copy(from.before()),
                         recordDataSerializer.copy(from.after()),
-                        metaSerializer.copy(from.meta()));
+                        metaSerializer.copy(from.meta()),
+                        from.getSchema());
             case REPLACE:
                 return DataChangeEvent.replaceEvent(
                         tableIdSerializer.copy(from.tableId()),

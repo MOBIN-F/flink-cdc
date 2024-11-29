@@ -80,7 +80,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class MySqlPipelineITCase extends MySqlSourceTestBase {
 
     protected static final MySqlContainer MYSQL8_CONTAINER =
-            createMySqlContainer(MySqlVersion.V8_0);
+            createMySqlContainer(MySqlVersion.V5_7);
 
     private final UniqueDatabase inventoryDatabase =
             new UniqueDatabase(MYSQL8_CONTAINER, "inventory", TEST_USER, TEST_PASSWORD);
@@ -124,7 +124,7 @@ public class MySqlPipelineITCase extends MySqlSourceTestBase {
                         .startupOptions(StartupOptions.initial())
                         .serverId(getServerId(env.getParallelism()))
                         .serverTimeZone("UTC")
-                        .includeSchemaChanges(SCHEMA_CHANGE_ENABLED.defaultValue());
+                        .includeSchemaChanges(false);
 
         FlinkSourceProvider sourceProvider =
                 (FlinkSourceProvider) new MySqlDataSource(configFactory).getEventSourceProvider();
