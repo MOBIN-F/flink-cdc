@@ -80,7 +80,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class MySqlPipelineITCase extends MySqlSourceTestBase {
 
     protected static final MySqlContainer MYSQL8_CONTAINER =
-            createMySqlContainer(MySqlVersion.V5_7);
+            createMySqlContainer(MySqlVersion.V8_0);
 
     private final UniqueDatabase inventoryDatabase =
             new UniqueDatabase(MYSQL8_CONTAINER, "inventory", TEST_USER, TEST_PASSWORD);
