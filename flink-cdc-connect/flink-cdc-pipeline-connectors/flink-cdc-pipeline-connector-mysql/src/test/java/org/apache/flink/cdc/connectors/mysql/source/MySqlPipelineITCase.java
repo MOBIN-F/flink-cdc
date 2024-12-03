@@ -124,7 +124,7 @@ public class MySqlPipelineITCase extends MySqlSourceTestBase {
                         .startupOptions(StartupOptions.initial())
                         .serverId(getServerId(env.getParallelism()))
                         .serverTimeZone("UTC")
-                        .includeSchemaChanges(false);
+                        .includeSchemaChanges(SCHEMA_CHANGE_ENABLED.defaultValue());
 
         FlinkSourceProvider sourceProvider =
                 (FlinkSourceProvider) new MySqlDataSource(configFactory).getEventSourceProvider();

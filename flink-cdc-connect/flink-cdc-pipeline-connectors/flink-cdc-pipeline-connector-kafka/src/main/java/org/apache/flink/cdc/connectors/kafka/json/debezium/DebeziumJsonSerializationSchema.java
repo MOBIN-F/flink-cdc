@@ -86,7 +86,7 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
 
     private InitializationContext context;
 
-    private final boolean includeColumnType;
+    private final boolean includeSchemaInfo;
 
     public DebeziumJsonSerializationSchema(
             TimestampFormat timestampFormat,
@@ -94,19 +94,19 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
             String mapNullKeyLiteral,
             ZoneId zoneId,
             boolean encodeDecimalAsPlainNumber,
-            boolean includeColumnType) {
+            boolean includeSchemaInfo) {
         this.timestampFormat = timestampFormat;
         this.mapNullKeyMode = mapNullKeyMode;
         this.mapNullKeyLiteral = mapNullKeyLiteral;
         this.encodeDecimalAsPlainNumber = encodeDecimalAsPlainNumber;
         this.zoneId = zoneId;
         jsonSerializers = new HashMap<>();
-        this.includeColumnType = includeColumnType;
+        this.includeSchemaInfo = includeSchemaInfo;
     }
 
     @Override
     public void open(InitializationContext context) {
-        if (includeColumnType) {
+        if (includeSchemaInfo) {
             reuseGenericRowData = new GenericRowData(2);
             payloadGenericRowData = new GenericRowData(4);
 
@@ -135,11 +135,12 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
                     DataTypeUtils.toFlinkDataType(schema.toRowDataType()).getLogicalType();
             DebeziumJsonRowDataSerializationSchema jsonSerializer =
                     new DebeziumJsonRowDataSerializationSchema(
-                            createJsonRowType(fromLogicalToDataType(rowType), includeColumnType),
+                            createJsonRowType(fromLogicalToDataType(rowType), includeSchemaInfo),
                             timestampFormat,
                             mapNullKeyMode,
                             mapNullKeyLiteral,
-                            encodeDecimalAsPlainNumber);
+                            encodeDecimalAsPlainNumber,
+                            includeSchemaInfo);
             try {
                 jsonSerializer.open(context);
             } catch (Exception e) {
@@ -174,10 +175,10 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
             }
 
             GenericRowData genericRowData =
-                    includeColumnType ? payloadGenericRowData : reuseGenericRowData;
+                    includeSchemaInfo ? payloadGenericRowData : reuseGenericRowData;
             converter.accept(dataChangeEvent, genericRowData);
 
-            if (includeColumnType) {
+            if (includeSchemaInfo) {
                 reuseGenericRowData.setField(
                         SCHEMA.getPosition(), StringData.fromString(dataChangeEvent.getSchema()));
             }
@@ -210,13 +211,13 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
 
     private void convertDeleteEventToRowData(
             DataChangeEvent dataChangeEvent, GenericRowData genericRowData) {
-        reuseGenericRowData.setField(
+        genericRowData.setField(
                 BEFORE.getPosition(),
                 jsonSerializers
                         .get(dataChangeEvent.tableId())
                         .getRowDataFromRecordData(dataChangeEvent.before(), false));
-        reuseGenericRowData.setField(AFTER.getPosition(), null);
-        reuseGenericRowData.setField(OPERATION.getPosition(), OP_DELETE);
+        genericRowData.setField(AFTER.getPosition(), null);
+        genericRowData.setField(OPERATION.getPosition(), OP_DELETE);
         genericRowData.setField(
                 SOURCE.getPosition(),
                 GenericRowData.of(
@@ -249,7 +250,7 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
      * href="https://debezium.io/documentation/reference/1.9/connectors/mysql.html">Debezium
      * docs</a> for more details.
      */
-    private static RowType createJsonRowType(DataType databaseSchema, boolean includeColumnType) {
+    private static RowType createJsonRowType(DataType databaseSchema, boolean includeSchemaInfo) {
         DataType payloadRowType =
                 DataTypes.ROW(
                         DataTypes.FIELD(BEFORE.getFieldName(), databaseSchema),
@@ -263,7 +264,7 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
                                         DataTypes.FIELD(
                                                 TABLE.getFieldName(), DataTypes.STRING()))));
 
-        if (includeColumnType) {
+        if (includeSchemaInfo) {
             return (RowType)
                     DataTypes.ROW(
                                     DataTypes.FIELD(SCHEMA.getFieldName(), DataTypes.STRING()),

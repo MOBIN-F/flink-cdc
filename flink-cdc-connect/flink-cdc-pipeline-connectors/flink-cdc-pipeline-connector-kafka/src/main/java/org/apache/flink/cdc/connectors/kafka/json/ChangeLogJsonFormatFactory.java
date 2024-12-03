@@ -51,7 +51,7 @@ public class ChangeLogJsonFormatFactory {
             ReadableConfig formatOptions,
             JsonSerializationType type,
             ZoneId zoneId,
-            boolean includeColumnType) {
+            boolean includeSchemaInfo) {
         TimestampFormat timestampFormat = JsonFormatOptionsUtil.getTimestampFormat(formatOptions);
         JsonFormatOptions.MapNullKeyMode mapNullKeyMode =
                 JsonFormatOptionsUtil.getMapNullKeyMode(formatOptions);
@@ -69,7 +69,7 @@ public class ChangeLogJsonFormatFactory {
                             mapNullKeyLiteral,
                             zoneId,
                             encodeDecimalAsPlainNumber,
-                            includeColumnType);
+                            includeSchemaInfo);
                 }
             case CANAL_JSON:
                 {

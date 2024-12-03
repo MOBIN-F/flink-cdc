@@ -88,15 +88,15 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
 
     private transient JsonConverter jsonConverter;
 
-    private final boolean includeColumnType;
+    private final boolean includeSchemaInfo;
 
     public DebeziumEventDeserializationSchema(
             SchemaDataTypeInference schemaDataTypeInference,
             DebeziumChangelogMode changelogMode,
-            boolean includeColumnType) {
+            boolean includeSchemaInfo) {
         this.schemaDataTypeInference = schemaDataTypeInference;
         this.changelogMode = changelogMode;
-        this.includeColumnType = includeColumnType;
+        this.includeSchemaInfo = includeSchemaInfo;
     }
 
     @Override
@@ -113,7 +113,7 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
         Schema valueSchema = record.valueSchema();
         Map<String, String> meta = getMetadata(record);
 
-        if (includeColumnType) {
+        if (includeSchemaInfo) {
             if (jsonConverter == null) {
                 initializeJsonConverter();
             }
@@ -121,7 +121,7 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
         if (op == Envelope.Operation.CREATE || op == Envelope.Operation.READ) {
             RecordData after = extractAfterDataRecord(value, valueSchema);
             List<DataChangeEvent> dataChangeEvent =
-                    includeColumnType
+                    includeSchemaInfo
                             ? Collections.singletonList(
                                     DataChangeEvent.insertEvent(
                                             tableId,
@@ -134,7 +134,7 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
         } else if (op == Envelope.Operation.DELETE) {
             RecordData before = extractBeforeDataRecord(value, valueSchema);
             List<DataChangeEvent> dataChangeEvent =
-                    includeColumnType
+                    includeSchemaInfo
                             ? Collections.singletonList(
                                     DataChangeEvent.deleteEvent(
                                             tableId,
@@ -149,7 +149,7 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
             if (changelogMode == DebeziumChangelogMode.ALL) {
                 RecordData before = extractBeforeDataRecord(value, valueSchema);
                 List<DataChangeEvent> dataChangeEvent =
-                        includeColumnType
+                        includeSchemaInfo
                                 ? Collections.singletonList(
                                         DataChangeEvent.updateEvent(
                                                 tableId,
@@ -162,7 +162,7 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
                 return dataChangeEvent;
             }
             List<DataChangeEvent> dataChangeEvent =
-                    includeColumnType
+                    includeSchemaInfo
                             ? Collections.singletonList(
                                     DataChangeEvent.updateEvent(
                                             tableId,
@@ -209,7 +209,6 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
         jsonConverter = new JsonConverter();
         final HashMap<String, Object> configs = new HashMap<>(2);
         configs.put(ConverterConfig.TYPE_CONFIG, ConverterType.VALUE.getName());
-        //        configs.put(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, true);
         jsonConverter.configure(configs);
     }
 

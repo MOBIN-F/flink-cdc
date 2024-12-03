@@ -28,6 +28,7 @@ import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.ObjectNode;
 
@@ -69,12 +70,15 @@ public class DebeziumJsonRowDataSerializationSchema extends JsonRowDataSerializa
     /** Flag indicating whether to serialize all decimals as plain numbers. */
     private final boolean encodeDecimalAsPlainNumber;
 
+    private final boolean includeSchemaInfo;
+
     public DebeziumJsonRowDataSerializationSchema(
             RowType rowType,
             TimestampFormat timestampFormat,
             JsonFormatOptions.MapNullKeyMode mapNullKeyMode,
             String mapNullKeyLiteral,
-            boolean encodeDecimalAsPlainNumber) {
+            boolean encodeDecimalAsPlainNumber,
+            boolean includeSchemaInfo) {
         super(
                 rowType,
                 timestampFormat,
@@ -89,6 +93,7 @@ public class DebeziumJsonRowDataSerializationSchema extends JsonRowDataSerializa
         this.runtimeConverter =
                 new RowDataToJsonConverters(timestampFormat, mapNullKeyMode, mapNullKeyLiteral)
                         .createConverter(rowType);
+        this.includeSchemaInfo = includeSchemaInfo;
     }
 
     @Override
@@ -108,10 +113,14 @@ public class DebeziumJsonRowDataSerializationSchema extends JsonRowDataSerializa
 
         try {
             runtimeConverter.convert(mapper, node, row);
-            byte[] bytes = mapper.writeValueAsBytes(node);
-            String replace =
-                    new String(bytes).replace("\\\"", "\"").replace("\"{", "{").replace("}\"", "}");
-            return replace.getBytes();
+            if (includeSchemaInfo) {
+                // schema is a nested json string, asText() can return a pure string without other
+                // escape characters such as "\"
+                String schemaValue = node.get("schema").asText();
+                JsonNode schemaNode = mapper.readTree(schemaValue);
+                node.set("schema", schemaNode);
+            }
+            return mapper.writeValueAsBytes(node);
         } catch (Throwable t) {
             throw new RuntimeException(String.format("Could not serialize row '%s'.", row), t);
         }

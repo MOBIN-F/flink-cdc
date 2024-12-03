@@ -71,9 +71,7 @@ public class DataChangeEventSerializer extends TypeSerializerSingleton<DataChang
         }
         metaSerializer.serialize(event.meta(), target);
 
-        if (event.getSchema() == null) {
-            stringSerializer.serialize(event.getSchema(), target);
-        }
+        stringSerializer.serialize(event.getSchema(), target);
     }
 
     @Override

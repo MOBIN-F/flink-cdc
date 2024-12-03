@@ -66,8 +66,8 @@ public class MySqlEventDeserializer extends DebeziumEventDeserializationSchema {
     public MySqlEventDeserializer(
             DebeziumChangelogMode changelogMode,
             boolean includeSchemaChanges,
-            boolean includeColumnType) {
-        super(new MySqlSchemaDataTypeInference(), changelogMode, includeColumnType);
+            boolean includeSchemaInfo) {
+        super(new MySqlSchemaDataTypeInference(), changelogMode, includeSchemaInfo);
         this.includeSchemaChanges = includeSchemaChanges;
     }
 

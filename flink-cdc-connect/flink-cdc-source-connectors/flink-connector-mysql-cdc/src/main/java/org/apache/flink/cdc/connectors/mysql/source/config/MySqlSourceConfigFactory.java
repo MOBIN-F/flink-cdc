@@ -63,7 +63,7 @@ public class MySqlSourceConfigFactory implements Serializable {
     private double distributionFactorLower =
             MySqlSourceOptions.CHUNK_KEY_EVEN_DISTRIBUTION_FACTOR_LOWER_BOUND.defaultValue();
     private boolean includeSchemaChanges = false;
-    private boolean includeColumnType = false;
+    private boolean includeSchemaInfo = false;
     private boolean scanNewlyAddedTableEnabled = false;
     private boolean closeIdleReaders = false;
     private Properties jdbcProperties;
@@ -232,9 +232,9 @@ public class MySqlSourceConfigFactory implements Serializable {
         return this;
     }
 
-    /** Whether the {@link MySqlSource} should output the schema or not. */
-    public MySqlSourceConfigFactory includeColumnType(boolean includeColumnType) {
-        this.includeColumnType = includeColumnType;
+    /** Whether the {@link MySqlSource} should output the schema info or not. */
+    public MySqlSourceConfigFactory includeSchemaInfo(boolean includeSchemaInfo) {
+        this.includeSchemaInfo = includeSchemaInfo;
         return this;
     }
 
@@ -386,7 +386,7 @@ public class MySqlSourceConfigFactory implements Serializable {
                 distributionFactorUpper,
                 distributionFactorLower,
                 includeSchemaChanges,
-                includeColumnType,
+                includeSchemaInfo,
                 scanNewlyAddedTableEnabled,
                 closeIdleReaders,
                 props,
