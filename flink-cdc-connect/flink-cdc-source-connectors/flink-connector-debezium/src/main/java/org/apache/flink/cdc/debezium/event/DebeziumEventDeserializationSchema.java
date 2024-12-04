@@ -39,6 +39,10 @@ import org.apache.flink.cdc.runtime.typeutils.BinaryRecordDataGenerator;
 import org.apache.flink.cdc.runtime.typeutils.EventTypeInfo;
 import org.apache.flink.util.Collector;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.debezium.data.Envelope;
 import io.debezium.data.SpecialValueDecimal;
 import io.debezium.data.VariableScaleDecimal;
@@ -127,7 +131,8 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
                                             tableId,
                                             after,
                                             meta,
-                                            jsonConverter.asJsonSchema(valueSchema).toString()))
+                                            extractBeforeAndAfterSchema(
+                                                    jsonConverter.asJsonSchema(valueSchema))))
                             : Collections.singletonList(
                                     DataChangeEvent.insertEvent(tableId, after, meta));
             return dataChangeEvent;
@@ -140,7 +145,8 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
                                             tableId,
                                             before,
                                             meta,
-                                            jsonConverter.asJsonSchema(valueSchema).toString()))
+                                            extractBeforeAndAfterSchema(
+                                                    jsonConverter.asJsonSchema(valueSchema))))
                             : Collections.singletonList(
                                     DataChangeEvent.deleteEvent(tableId, before, meta));
             return dataChangeEvent;
@@ -156,7 +162,8 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
                                                 before,
                                                 after,
                                                 meta,
-                                                jsonConverter.asJsonSchema(valueSchema).toString()))
+                                                extractBeforeAndAfterSchema(
+                                                        jsonConverter.asJsonSchema(valueSchema))))
                                 : Collections.singletonList(
                                         DataChangeEvent.updateEvent(tableId, before, after, meta));
                 return dataChangeEvent;
@@ -169,7 +176,8 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
                                             null,
                                             after,
                                             meta,
-                                            jsonConverter.asJsonSchema(valueSchema).toString()))
+                                            extractBeforeAndAfterSchema(
+                                                    jsonConverter.asJsonSchema(valueSchema))))
                             : Collections.singletonList(
                                     DataChangeEvent.updateEvent(tableId, null, after, meta));
             return dataChangeEvent;
@@ -194,6 +202,24 @@ public abstract class DebeziumEventDeserializationSchema extends SourceRecordEve
         Schema afterSchema = fieldSchema(valueSchema, Envelope.FieldName.AFTER);
         Struct afterValue = fieldStruct(value, Envelope.FieldName.AFTER);
         return extractDataRecord(afterValue, afterSchema);
+    }
+
+    /** extract schema of before or after fields. */
+    private String extractBeforeAndAfterSchema(ObjectNode valueSchema) {
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode copyNode = valueSchema.deepCopy();
+
+        ArrayNode fieldsArray = (ArrayNode) copyNode.get("fields");
+        ArrayNode newFields = mapper.createArrayNode();
+        for (JsonNode field : fieldsArray) {
+            String fieldName = field.get("field").asText();
+            if (fieldName.equals(Envelope.FieldName.BEFORE)
+                    || fieldName.equals(Envelope.FieldName.AFTER)) {
+                newFields.add(field);
+            }
+        }
+        copyNode.set("fields", newFields);
+        return copyNode.toString();
     }
 
     private RecordData extractDataRecord(Struct value, Schema valueSchema) throws Exception {
