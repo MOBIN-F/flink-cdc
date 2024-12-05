@@ -27,7 +27,7 @@ import org.apache.flink.cdc.pipeline.tests.utils.PipelineTestEnvironment;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator;
-import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.apache.kafka.clients.CommonClientConfigs;
@@ -47,13 +47,18 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
+import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.apache.flink.util.DockerImageVersions.KAFKA;
@@ -123,7 +128,6 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
     public void before() throws Exception {
         super.before();
         mysqlInventoryDatabase.createAndInitialize();
-        createTestTopic(1, TOPIC_REPLICATION_FACTOR);
     }
 
     @After
@@ -134,6 +138,8 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
 
     @Test
     public void testSyncWholeDatabase() throws Exception {
+        LOG.info("create test topic");
+        createTestTopic(1, TOPIC_REPLICATION_FACTOR);
         String pipelineJob =
                 String.format(
                         "source:\n"
@@ -170,9 +176,10 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         Thread.sleep(60000);
         final List<ConsumerRecord<byte[], byte[]>> collectedRecords =
                 drainAllRecordsFromTopic(topic, false, 0);
-        final long recordsCount = 13;
-        assertThat(collectedRecords.size()).isEqualTo(recordsCount);
-        //        Thread.sleep(5000000);
+
+        assertThat(deserializeValues(collectedRecords))
+                .isEqualTo(getExpectedRecords("expectedEvents/kafka-debezium-json.txt"));
+
         //        waitUntilSpecificEvent(
         //                String.format(
         //                        "DataChangeEvent{tableId=%s.customers, before=[], after=[104,
@@ -184,47 +191,8 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         // tire, 24 inch spare tire, 22.2, null, null, null], op=INSERT, meta=()}",
         //                        mysqlInventoryDatabase.getDatabaseName()));
         //
-        //        validateResult(
-        //                "CreateTableEvent{tableId=%s.customers, schema=columns={`id` INT NOT
-        // NULL,`name` VARCHAR(255) NOT NULL 'flink',`address` VARCHAR(1024),`phone_number`
-        // VARCHAR(512)}, primaryKeys=id, options=()}",
-        //                "DataChangeEvent{tableId=%s.customers, before=[], after=[104, user_4,
-        // Shanghai, 123567891234], op=INSERT, meta=()}",
-        //                "DataChangeEvent{tableId=%s.customers, before=[], after=[103, user_3,
-        // Shanghai, 123567891234], op=INSERT, meta=()}",
-        //                "DataChangeEvent{tableId=%s.customers, before=[], after=[102, user_2,
-        // Shanghai, 123567891234], op=INSERT, meta=()}",
-        //                "DataChangeEvent{tableId=%s.customers, before=[], after=[101, user_1,
-        // Shanghai, 123567891234], op=INSERT, meta=()}",
-        //                "CreateTableEvent{tableId=%s.products, schema=columns={`id` INT NOT
-        // NULL,`name` VARCHAR(255) NOT NULL 'flink',`description` VARCHAR(512),`weight`
-        // FLOAT,`enum_c` STRING 'red',`json_c` STRING,`point_c` STRING}, primaryKeys=id,
-        // options=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[], after=[109, spare tire,
-        // 24 inch spare tire, 22.2, null, null, null], op=INSERT, meta=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[], after=[107, rocks, box of
-        // assorted rocks, 5.3, null, null, null], op=INSERT, meta=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[], after=[108, jacket, water
-        // resistent black wind breaker, 0.1, null, null, null], op=INSERT, meta=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[], after=[105, hammer, 14oz
-        // carpenter's hammer, 0.875, red, {\"k1\": \"v1\", \"k2\": \"v2\"},
-        // {\"coordinates\":[5,5],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[], after=[106, hammer, 16oz
-        // carpenter's hammer, 1.0, null, null, null], op=INSERT, meta=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[], after=[103, 12-pack drill
-        // bits, 12-pack of drill bits with sizes ranging from #40 to #3, 0.8, red, {\"key3\":
-        // \"value3\"}, {\"coordinates\":[3,3],\"type\":\"Point\",\"srid\":0}], op=INSERT,
-        // meta=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[], after=[104, hammer, 12oz
-        // carpenter's hammer, 0.75, white, {\"key4\": \"value4\"},
-        // {\"coordinates\":[4,4],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[], after=[101, scooter,
-        // Small 2-wheel scooter, 3.14, red, {\"key1\": \"value1\"},
-        // {\"coordinates\":[1,1],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[], after=[102, car battery,
-        // 12V car battery, 8.1, white, {\"key2\": \"value2\"},
-        // {\"coordinates\":[2,2],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}");
-        //
+        //        validateResult(getExpectedRecords("expectedEvents/kafka-debezium-json.txt"));
+
         //        LOG.info("Begin incremental reading stage.");
         //        // generate binlogs
         //        String mysqlJdbcUrl =
@@ -234,9 +202,9 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         //                        MYSQL.getDatabasePort(),
         //                        mysqlInventoryDatabase.getDatabaseName());
         //        try (Connection conn =
-        //                        DriverManager.getConnection(
-        //                                mysqlJdbcUrl, MYSQL_TEST_USER, MYSQL_TEST_PASSWORD);
-        //                Statement stat = conn.createStatement()) {
+        //                     DriverManager.getConnection(
+        //                             mysqlJdbcUrl, MYSQL_TEST_USER, MYSQL_TEST_PASSWORD);
+        //             Statement stat = conn.createStatement()) {
         //            stat.execute("UPDATE products SET description='18oz carpenter hammer' WHERE
         // id=106;");
         //            stat.execute("UPDATE products SET weight='5.1' WHERE id=107;");
@@ -272,7 +240,7 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         //                        "DataChangeEvent{tableId=%s.products, before=[111, scooter, Big
         // 2-wheel scooter , 5.17, null, null, null, 1], after=[], op=DELETE, meta=()}",
         //                        mysqlInventoryDatabase.getDatabaseName()));
-        //
+
         //        validateResult(
         //                "DataChangeEvent{tableId=%s.products, before=[106, hammer, 16oz
         // carpenter's hammer, 1.0, null, null, null], after=[106, hammer, 18oz carpenter hammer,
@@ -297,7 +265,7 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         // scooter , 5.17, null, null, null, 1], after=[], op=DELETE, meta=()}");
     }
 
-    private void validateResult(String... expectedEvents) throws Exception {
+    private void validateResult(List<String> expectedEvents) throws Exception {
         String dbName = mysqlInventoryDatabase.getDatabaseName();
         for (String event : expectedEvents) {
             waitUntilSpecificEvent(String.format(event, dbName, dbName));
@@ -359,15 +327,35 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         result.all().get();
     }
 
-    private static List<JsonNode> deserializeValues(List<ConsumerRecord<byte[], byte[]>> records)
+    private static List<String> deserializeValues(List<ConsumerRecord<byte[], byte[]>> records)
             throws IOException {
         ObjectMapper mapper =
                 JacksonMapperFactory.createObjectMapper()
                         .configure(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN, false);
-        List<JsonNode> result = new ArrayList<>();
+        List<String> result = new ArrayList<>();
         for (ConsumerRecord<byte[], byte[]> record : records) {
-            result.add(mapper.readTree(record.value()));
+            result.add(new String(record.value(), "UTF-8"));
         }
         return result;
+    }
+
+    protected List<String> getExpectedRecords(String resourceDirFormat) throws Exception {
+        URL url =
+                MysqlToKafkaE2eITCase.class
+                        .getClassLoader()
+                        .getResource(String.format(resourceDirFormat));
+        return Files.readAllLines(Paths.get(url.toURI())).stream()
+                .filter(this::isRecordLine)
+                .collect(Collectors.toList());
+    }
+
+    protected boolean isRecordLine(String line) {
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            objectMapper.readTree(line);
+            return !StringUtils.isEmpty(line);
+        } catch (JsonProcessingException e) {
+            return false;
+        }
     }
 }
