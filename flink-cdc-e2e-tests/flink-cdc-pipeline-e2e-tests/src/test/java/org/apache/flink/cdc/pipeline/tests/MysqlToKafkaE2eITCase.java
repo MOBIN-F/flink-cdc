@@ -121,17 +121,19 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         LOG.info("Starting containers...");
         Startables.deepStart(Stream.of(MYSQL)).join();
         Startables.deepStart(Stream.of(KAFKA_CONTAINER)).join();
-        Map<String, Object> properties = new HashMap<>();
-        properties.put(
-                CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG,
-                KAFKA_CONTAINER.getBootstrapServers());
-        admin = AdminClient.create(properties);
+
         LOG.info("Containers are started.");
     }
 
     @Before
     public void before() throws Exception {
         super.before();
+
+        Map<String, Object> properties1 = new HashMap<>();
+        properties1.put(
+                CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG,
+                KAFKA_CONTAINER.getBootstrapServers());
+        admin = AdminClient.create(properties1);
         createTestTopic(1, TOPIC_REPLICATION_FACTOR);
         Properties properties = getKafkaClientConfiguration();
         consumer = new KafkaConsumer<>(properties);
@@ -142,12 +144,9 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
     @After
     public void after() {
         super.after();
+        admin.deleteTopics(Collections.singletonList(topic));
+        admin.close();
         mysqlInventoryDatabase.dropDatabase();
-    }
-
-    @Test
-    public void t() {
-        System.out.println(11);
     }
 
     @Test
@@ -179,7 +178,6 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                         mysqlInventoryDatabase.getDatabaseName(),
                         topic,
                         parallelism);
-        System.out.println(pipelineJob);
         Path mysqlCdcJar = TestUtils.getResource("mysql-cdc-pipeline-connector.jar");
         Path kafkaCdcJar = TestUtils.getResource("kafka-cdc-pipeline-connector.jar");
         Path mysqlDriverJar = TestUtils.getResource("mysql-driver.jar");
@@ -189,8 +187,8 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         List<ConsumerRecord<byte[], byte[]>> collectedRecords = new ArrayList<>();
         int expectedEventCount = 13;
         waitUntilSpecificEventCount(collectedRecords, expectedEventCount);
-        assertThat(getExpectedRecords("expectedEvents/kafka-debezium-json.txt"))
-                .containsAll(deserializeValues(collectedRecords));
+        List<String> expectedRecords = getExpectedRecords("expectedEvents/kafka-debezium-json.txt");
+        assertThat(expectedRecords).containsAll(deserializeValues(collectedRecords));
         LOG.info("Begin incremental reading stage.");
         // generate binlogs
         String mysqlJdbcUrl =
@@ -200,12 +198,11 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                         MYSQL.getDatabasePort(),
                         mysqlInventoryDatabase.getDatabaseName());
         try (Connection conn =
-                     DriverManager.getConnection(
-                             mysqlJdbcUrl, MYSQL_TEST_USER, MYSQL_TEST_PASSWORD);
-             Statement stat = conn.createStatement()) {
+                        DriverManager.getConnection(
+                                mysqlJdbcUrl, MYSQL_TEST_USER, MYSQL_TEST_PASSWORD);
+                Statement stat = conn.createStatement()) {
             stat.execute("UPDATE products SET description='18oz carpenter hammer' WHERE id=106;");
             stat.execute("UPDATE products SET weight='5.1' WHERE id=107;");
-
 
             // modify table schema
             stat.execute("ALTER TABLE products ADD COLUMN new_col INT;");
@@ -221,15 +218,15 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
             LOG.error("Update table for CDC failed.", e);
             throw e;
         }
-        expectedEventCount = 23;
-        waitUntilSpecificEventCount(collectedRecords, expectedEventCount);
-        assertThat(deserializeValues(collectedRecords))
-                .containsExactlyInAnyOrderElementsOf(getExpectedRecords("expectedEvents/kafka-debezium-json.txt"));
 
+        expectedEventCount = 20;
+        waitUntilSpecificEventCount(collectedRecords, expectedEventCount);
+        assertThat(expectedRecords)
+                .containsExactlyInAnyOrderElementsOf(deserializeValues(collectedRecords));
     }
 
-
-    private void waitUntilSpecificEventCount(List<ConsumerRecord<byte[], byte[]>>  actualEvent, int expectedCount) throws Exception {
+    private void waitUntilSpecificEventCount(
+            List<ConsumerRecord<byte[], byte[]>> actualEvent, int expectedCount) throws Exception {
         boolean result = false;
         long endTimeout = System.currentTimeMillis() + MysqlToKafkaE2eITCase.EVENT_WAITING_TIMEOUT;
         while (System.currentTimeMillis() < endTimeout) {
@@ -249,7 +246,6 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                             + actualEvent.size());
         }
     }
-
 
     private static Properties getKafkaClientConfiguration() {
         final Properties standardProps = new Properties();
@@ -294,7 +290,11 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                         .getResource(String.format(resourceDirFormat));
         return Files.readAllLines(Paths.get(url.toURI())).stream()
                 .filter(this::isRecordLine)
-                .map(line -> line.replace("_tmp_databaseName_",mysqlInventoryDatabase.getDatabaseName()))
+                .map(
+                        line ->
+                                line.replace(
+                                        "_tmp_databaseName_",
+                                        mysqlInventoryDatabase.getDatabaseName()))
                 .collect(Collectors.toList());
     }
 
