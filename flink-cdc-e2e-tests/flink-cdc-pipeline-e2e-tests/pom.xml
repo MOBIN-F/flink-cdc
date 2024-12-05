@@ -105,6 +105,7 @@ limitations under the License.
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
+
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-connector-test-util</artifactId>
@@ -254,6 +255,16 @@ limitations under the License.
                             <artifactId>flink-cdc-pipeline-connector-starrocks</artifactId>
                             <version>${project.version}</version>
                             <destFileName>starrocks-cdc-pipeline-connector.jar</destFileName>
+                            <type>jar</type>
+                            <outputDirectory>${project.build.directory}/dependencies
+                            </outputDirectory>
+                        </artifactItem>
+
+                        <artifactItem>
+                            <groupId>org.apache.flink</groupId>
+                            <artifactId>flink-cdc-pipeline-connector-kafka</artifactId>
+                            <version>${project.version}</version>
+                            <destFileName>kafka-cdc-pipeline-connector.jar</destFileName>
                             <type>jar</type>
                             <outputDirectory>${project.build.directory}/dependencies
                             </outputDirectory>

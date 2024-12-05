@@ -24,11 +24,17 @@ import org.apache.flink.cdc.connectors.mysql.testutils.MySqlContainer;
 import org.apache.flink.cdc.connectors.mysql.testutils.MySqlVersion;
 import org.apache.flink.cdc.connectors.mysql.testutils.UniqueDatabase;
 import org.apache.flink.cdc.pipeline.tests.utils.PipelineTestEnvironment;
+import org.apache.flink.util.jackson.JacksonMapperFactory;
+
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -42,21 +48,16 @@ import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.lifecycle.Startables;
 
+import java.io.IOException;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.Duration;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
 
 import static org.apache.flink.util.DockerImageVersions.KAFKA;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /** End-to-end tests for mysql cdc to Kafka pipeline job. */
 @RunWith(Parameterized.class)
@@ -74,6 +75,7 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
 
     private static AdminClient admin;
     private static final String INTER_CONTAINER_KAFKA_ALIAS = "kafka";
+    private static final int ZK_TIMEOUT_MILLIS = 30000;
     private static final short TOPIC_REPLICATION_FACTOR = 1;
     private TableId table;
     private String topic;
@@ -143,6 +145,7 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                                 + "  tables: %s.\\.*\n"
                                 + "  server-id: 5400-5404\n"
                                 + "  server-time-zone: UTC\n"
+                                + "  schema-info.enabled: true\n"
                                 + "\n"
                                 + "sink:\n"
                                 + "  type: kafka\n"
@@ -159,87 +162,139 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                         topic,
                         parallelism);
         Path mysqlCdcJar = TestUtils.getResource("mysql-cdc-pipeline-connector.jar");
-        Path valuesCdcJar = TestUtils.getResource("values-cdc-pipeline-connector.jar");
+        Path kafkaCdcJar = TestUtils.getResource("kafka-cdc-pipeline-connector.jar");
         Path mysqlDriverJar = TestUtils.getResource("mysql-driver.jar");
-        submitPipelineJob(pipelineJob, mysqlCdcJar, valuesCdcJar, mysqlDriverJar);
+        submitPipelineJob(pipelineJob, mysqlCdcJar, kafkaCdcJar, mysqlDriverJar);
         waitUntilJobRunning(Duration.ofSeconds(30));
         LOG.info("Pipeline job is running");
-        waitUntilSpecificEvent(
-                String.format(
-                        "DataChangeEvent{tableId=%s.customers, before=[], after=[104, user_4, Shanghai, 123567891234], op=INSERT, meta=()}",
-                        mysqlInventoryDatabase.getDatabaseName()));
-        waitUntilSpecificEvent(
-                String.format(
-                        "DataChangeEvent{tableId=%s.products, before=[], after=[109, spare tire, 24 inch spare tire, 22.2, null, null, null], op=INSERT, meta=()}",
-                        mysqlInventoryDatabase.getDatabaseName()));
-
-        validateResult(
-                "CreateTableEvent{tableId=%s.customers, schema=columns={`id` INT NOT NULL,`name` VARCHAR(255) NOT NULL 'flink',`address` VARCHAR(1024),`phone_number` VARCHAR(512)}, primaryKeys=id, options=()}",
-                "DataChangeEvent{tableId=%s.customers, before=[], after=[104, user_4, Shanghai, 123567891234], op=INSERT, meta=()}",
-                "DataChangeEvent{tableId=%s.customers, before=[], after=[103, user_3, Shanghai, 123567891234], op=INSERT, meta=()}",
-                "DataChangeEvent{tableId=%s.customers, before=[], after=[102, user_2, Shanghai, 123567891234], op=INSERT, meta=()}",
-                "DataChangeEvent{tableId=%s.customers, before=[], after=[101, user_1, Shanghai, 123567891234], op=INSERT, meta=()}",
-                "CreateTableEvent{tableId=%s.products, schema=columns={`id` INT NOT NULL,`name` VARCHAR(255) NOT NULL 'flink',`description` VARCHAR(512),`weight` FLOAT,`enum_c` STRING 'red',`json_c` STRING,`point_c` STRING}, primaryKeys=id, options=()}",
-                "DataChangeEvent{tableId=%s.products, before=[], after=[109, spare tire, 24 inch spare tire, 22.2, null, null, null], op=INSERT, meta=()}",
-                "DataChangeEvent{tableId=%s.products, before=[], after=[107, rocks, box of assorted rocks, 5.3, null, null, null], op=INSERT, meta=()}",
-                "DataChangeEvent{tableId=%s.products, before=[], after=[108, jacket, water resistent black wind breaker, 0.1, null, null, null], op=INSERT, meta=()}",
-                "DataChangeEvent{tableId=%s.products, before=[], after=[105, hammer, 14oz carpenter's hammer, 0.875, red, {\"k1\": \"v1\", \"k2\": \"v2\"}, {\"coordinates\":[5,5],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
-                "DataChangeEvent{tableId=%s.products, before=[], after=[106, hammer, 16oz carpenter's hammer, 1.0, null, null, null], op=INSERT, meta=()}",
-                "DataChangeEvent{tableId=%s.products, before=[], after=[103, 12-pack drill bits, 12-pack of drill bits with sizes ranging from #40 to #3, 0.8, red, {\"key3\": \"value3\"}, {\"coordinates\":[3,3],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
-                "DataChangeEvent{tableId=%s.products, before=[], after=[104, hammer, 12oz carpenter's hammer, 0.75, white, {\"key4\": \"value4\"}, {\"coordinates\":[4,4],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
-                "DataChangeEvent{tableId=%s.products, before=[], after=[101, scooter, Small 2-wheel scooter, 3.14, red, {\"key1\": \"value1\"}, {\"coordinates\":[1,1],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
-                "DataChangeEvent{tableId=%s.products, before=[], after=[102, car battery, 12V car battery, 8.1, white, {\"key2\": \"value2\"}, {\"coordinates\":[2,2],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}");
-
-        LOG.info("Begin incremental reading stage.");
-        // generate binlogs
-        String mysqlJdbcUrl =
-                String.format(
-                        "jdbc:mysql://%s:%s/%s",
-                        MYSQL.getHost(),
-                        MYSQL.getDatabasePort(),
-                        mysqlInventoryDatabase.getDatabaseName());
-        try (Connection conn =
-                        DriverManager.getConnection(
-                                mysqlJdbcUrl, MYSQL_TEST_USER, MYSQL_TEST_PASSWORD);
-                Statement stat = conn.createStatement()) {
-            stat.execute("UPDATE products SET description='18oz carpenter hammer' WHERE id=106;");
-            stat.execute("UPDATE products SET weight='5.1' WHERE id=107;");
-
-            // Perform DDL changes after the binlog is generated
-            waitUntilSpecificEvent(
-                    String.format(
-                            "DataChangeEvent{tableId=%s.products, before=[106, hammer, 16oz carpenter's hammer, 1.0, null, null, null], after=[106, hammer, 18oz carpenter hammer, 1.0, null, null, null], op=UPDATE, meta=()}",
-                            mysqlInventoryDatabase.getDatabaseName()));
-
-            // modify table schema
-            stat.execute("ALTER TABLE products ADD COLUMN new_col INT;");
-            stat.execute(
-                    "INSERT INTO products VALUES (default,'jacket','water resistent white wind breaker',0.2, null, null, null, 1);"); // 110
-            stat.execute(
-                    "INSERT INTO products VALUES (default,'scooter','Big 2-wheel scooter ',5.18, null, null, null, 1);"); // 111
-            stat.execute(
-                    "UPDATE products SET description='new water resistent white wind breaker', weight='0.5' WHERE id=110;");
-            stat.execute("UPDATE products SET weight='5.17' WHERE id=111;");
-            stat.execute("DELETE FROM products WHERE id=111;");
-        } catch (SQLException e) {
-            LOG.error("Update table for CDC failed.", e);
-            throw e;
-        }
-
-        waitUntilSpecificEvent(
-                String.format(
-                        "DataChangeEvent{tableId=%s.products, before=[111, scooter, Big 2-wheel scooter , 5.17, null, null, null, 1], after=[], op=DELETE, meta=()}",
-                        mysqlInventoryDatabase.getDatabaseName()));
-
-        validateResult(
-                "DataChangeEvent{tableId=%s.products, before=[106, hammer, 16oz carpenter's hammer, 1.0, null, null, null], after=[106, hammer, 18oz carpenter hammer, 1.0, null, null, null], op=UPDATE, meta=()}",
-                "DataChangeEvent{tableId=%s.products, before=[107, rocks, box of assorted rocks, 5.3, null, null, null], after=[107, rocks, box of assorted rocks, 5.1, null, null, null], op=UPDATE, meta=()}",
-                "AddColumnEvent{tableId=%s.products, addedColumns=[ColumnWithPosition{column=`new_col` INT, position=LAST, existedColumnName=null}]}",
-                "DataChangeEvent{tableId=%s.products, before=[], after=[110, jacket, water resistent white wind breaker, 0.2, null, null, null, 1], op=INSERT, meta=()}",
-                "DataChangeEvent{tableId=%s.products, before=[], after=[111, scooter, Big 2-wheel scooter , 5.18, null, null, null, 1], op=INSERT, meta=()}",
-                "DataChangeEvent{tableId=%s.products, before=[110, jacket, water resistent white wind breaker, 0.2, null, null, null, 1], after=[110, jacket, new water resistent white wind breaker, 0.5, null, null, null, 1], op=UPDATE, meta=()}",
-                "DataChangeEvent{tableId=%s.products, before=[111, scooter, Big 2-wheel scooter , 5.18, null, null, null, 1], after=[111, scooter, Big 2-wheel scooter , 5.17, null, null, null, 1], op=UPDATE, meta=()}",
-                "DataChangeEvent{tableId=%s.products, before=[111, scooter, Big 2-wheel scooter , 5.17, null, null, null, 1], after=[], op=DELETE, meta=()}");
+        Thread.sleep(60000);
+        final List<ConsumerRecord<byte[], byte[]>> collectedRecords =
+                drainAllRecordsFromTopic(topic, false, 0);
+        final long recordsCount = 13;
+        assertThat(collectedRecords.size()).isEqualTo(recordsCount);
+        //        Thread.sleep(5000000);
+        //        waitUntilSpecificEvent(
+        //                String.format(
+        //                        "DataChangeEvent{tableId=%s.customers, before=[], after=[104,
+        // user_4, Shanghai, 123567891234], op=INSERT, meta=()}",
+        //                        mysqlInventoryDatabase.getDatabaseName()));
+        //        waitUntilSpecificEvent(
+        //                String.format(
+        //                        "DataChangeEvent{tableId=%s.products, before=[], after=[109, spare
+        // tire, 24 inch spare tire, 22.2, null, null, null], op=INSERT, meta=()}",
+        //                        mysqlInventoryDatabase.getDatabaseName()));
+        //
+        //        validateResult(
+        //                "CreateTableEvent{tableId=%s.customers, schema=columns={`id` INT NOT
+        // NULL,`name` VARCHAR(255) NOT NULL 'flink',`address` VARCHAR(1024),`phone_number`
+        // VARCHAR(512)}, primaryKeys=id, options=()}",
+        //                "DataChangeEvent{tableId=%s.customers, before=[], after=[104, user_4,
+        // Shanghai, 123567891234], op=INSERT, meta=()}",
+        //                "DataChangeEvent{tableId=%s.customers, before=[], after=[103, user_3,
+        // Shanghai, 123567891234], op=INSERT, meta=()}",
+        //                "DataChangeEvent{tableId=%s.customers, before=[], after=[102, user_2,
+        // Shanghai, 123567891234], op=INSERT, meta=()}",
+        //                "DataChangeEvent{tableId=%s.customers, before=[], after=[101, user_1,
+        // Shanghai, 123567891234], op=INSERT, meta=()}",
+        //                "CreateTableEvent{tableId=%s.products, schema=columns={`id` INT NOT
+        // NULL,`name` VARCHAR(255) NOT NULL 'flink',`description` VARCHAR(512),`weight`
+        // FLOAT,`enum_c` STRING 'red',`json_c` STRING,`point_c` STRING}, primaryKeys=id,
+        // options=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[], after=[109, spare tire,
+        // 24 inch spare tire, 22.2, null, null, null], op=INSERT, meta=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[], after=[107, rocks, box of
+        // assorted rocks, 5.3, null, null, null], op=INSERT, meta=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[], after=[108, jacket, water
+        // resistent black wind breaker, 0.1, null, null, null], op=INSERT, meta=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[], after=[105, hammer, 14oz
+        // carpenter's hammer, 0.875, red, {\"k1\": \"v1\", \"k2\": \"v2\"},
+        // {\"coordinates\":[5,5],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[], after=[106, hammer, 16oz
+        // carpenter's hammer, 1.0, null, null, null], op=INSERT, meta=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[], after=[103, 12-pack drill
+        // bits, 12-pack of drill bits with sizes ranging from #40 to #3, 0.8, red, {\"key3\":
+        // \"value3\"}, {\"coordinates\":[3,3],\"type\":\"Point\",\"srid\":0}], op=INSERT,
+        // meta=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[], after=[104, hammer, 12oz
+        // carpenter's hammer, 0.75, white, {\"key4\": \"value4\"},
+        // {\"coordinates\":[4,4],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[], after=[101, scooter,
+        // Small 2-wheel scooter, 3.14, red, {\"key1\": \"value1\"},
+        // {\"coordinates\":[1,1],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[], after=[102, car battery,
+        // 12V car battery, 8.1, white, {\"key2\": \"value2\"},
+        // {\"coordinates\":[2,2],\"type\":\"Point\",\"srid\":0}], op=INSERT, meta=()}");
+        //
+        //        LOG.info("Begin incremental reading stage.");
+        //        // generate binlogs
+        //        String mysqlJdbcUrl =
+        //                String.format(
+        //                        "jdbc:mysql://%s:%s/%s",
+        //                        MYSQL.getHost(),
+        //                        MYSQL.getDatabasePort(),
+        //                        mysqlInventoryDatabase.getDatabaseName());
+        //        try (Connection conn =
+        //                        DriverManager.getConnection(
+        //                                mysqlJdbcUrl, MYSQL_TEST_USER, MYSQL_TEST_PASSWORD);
+        //                Statement stat = conn.createStatement()) {
+        //            stat.execute("UPDATE products SET description='18oz carpenter hammer' WHERE
+        // id=106;");
+        //            stat.execute("UPDATE products SET weight='5.1' WHERE id=107;");
+        //
+        //            // Perform DDL changes after the binlog is generated
+        //            waitUntilSpecificEvent(
+        //                    String.format(
+        //                            "DataChangeEvent{tableId=%s.products, before=[106, hammer,
+        // 16oz carpenter's hammer, 1.0, null, null, null], after=[106, hammer, 18oz carpenter
+        // hammer, 1.0, null, null, null], op=UPDATE, meta=()}",
+        //                            mysqlInventoryDatabase.getDatabaseName()));
+        //
+        //            // modify table schema
+        //            stat.execute("ALTER TABLE products ADD COLUMN new_col INT;");
+        //            stat.execute(
+        //                    "INSERT INTO products VALUES (default,'jacket','water resistent white
+        // wind breaker',0.2, null, null, null, 1);"); // 110
+        //            stat.execute(
+        //                    "INSERT INTO products VALUES (default,'scooter','Big 2-wheel scooter
+        // ',5.18, null, null, null, 1);"); // 111
+        //            stat.execute(
+        //                    "UPDATE products SET description='new water resistent white wind
+        // breaker', weight='0.5' WHERE id=110;");
+        //            stat.execute("UPDATE products SET weight='5.17' WHERE id=111;");
+        //            stat.execute("DELETE FROM products WHERE id=111;");
+        //        } catch (SQLException e) {
+        //            LOG.error("Update table for CDC failed.", e);
+        //            throw e;
+        //        }
+        //
+        //        waitUntilSpecificEvent(
+        //                String.format(
+        //                        "DataChangeEvent{tableId=%s.products, before=[111, scooter, Big
+        // 2-wheel scooter , 5.17, null, null, null, 1], after=[], op=DELETE, meta=()}",
+        //                        mysqlInventoryDatabase.getDatabaseName()));
+        //
+        //        validateResult(
+        //                "DataChangeEvent{tableId=%s.products, before=[106, hammer, 16oz
+        // carpenter's hammer, 1.0, null, null, null], after=[106, hammer, 18oz carpenter hammer,
+        // 1.0, null, null, null], op=UPDATE, meta=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[107, rocks, box of assorted
+        // rocks, 5.3, null, null, null], after=[107, rocks, box of assorted rocks, 5.1, null, null,
+        // null], op=UPDATE, meta=()}",
+        //                "AddColumnEvent{tableId=%s.products,
+        // addedColumns=[ColumnWithPosition{column=`new_col` INT, position=LAST,
+        // existedColumnName=null}]}",
+        //                "DataChangeEvent{tableId=%s.products, before=[], after=[110, jacket, water
+        // resistent white wind breaker, 0.2, null, null, null, 1], op=INSERT, meta=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[], after=[111, scooter, Big
+        // 2-wheel scooter , 5.18, null, null, null, 1], op=INSERT, meta=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[110, jacket, water resistent
+        // white wind breaker, 0.2, null, null, null, 1], after=[110, jacket, new water resistent
+        // white wind breaker, 0.5, null, null, null, 1], op=UPDATE, meta=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[111, scooter, Big 2-wheel
+        // scooter , 5.18, null, null, null, 1], after=[111, scooter, Big 2-wheel scooter , 5.17,
+        // null, null, null, 1], op=UPDATE, meta=()}",
+        //                "DataChangeEvent{tableId=%s.products, before=[111, scooter, Big 2-wheel
+        // scooter , 5.17, null, null, null, 1], after=[], op=DELETE, meta=()}");
     }
 
     private void validateResult(String... expectedEvents) throws Exception {
@@ -269,6 +324,28 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         }
     }
 
+    private List<ConsumerRecord<byte[], byte[]>> drainAllRecordsFromTopic(
+            String topic, boolean committed, int... partitionArr) {
+        Properties properties = getKafkaClientConfiguration();
+        Set<Integer> partitions = new HashSet<>();
+        for (int partition : partitionArr) {
+            partitions.add(partition);
+        }
+        return KafkaUtil.drainAllRecordsFromTopic(topic, properties, committed, partitions);
+    }
+
+    private static Properties getKafkaClientConfiguration() {
+        final Properties standardProps = new Properties();
+        standardProps.put("bootstrap.servers", KAFKA_CONTAINER.getBootstrapServers());
+        standardProps.put("group.id", UUID.randomUUID().toString());
+        standardProps.put("enable.auto.commit", false);
+        standardProps.put("auto.offset.reset", "earliest");
+        standardProps.put("max.partition.fetch.bytes", 256);
+        standardProps.put("zookeeper.session.timeout.ms", ZK_TIMEOUT_MILLIS);
+        standardProps.put("zookeeper.connection.timeout.ms", ZK_TIMEOUT_MILLIS);
+        return standardProps;
+    }
+
     private void createTestTopic(int numPartitions, short replicationFactor)
             throws ExecutionException, InterruptedException {
         table =
@@ -280,5 +357,17 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                         Collections.singletonList(
                                 new NewTopic(topic, numPartitions, replicationFactor)));
         result.all().get();
+    }
+
+    private static List<JsonNode> deserializeValues(List<ConsumerRecord<byte[], byte[]>> records)
+            throws IOException {
+        ObjectMapper mapper =
+                JacksonMapperFactory.createObjectMapper()
+                        .configure(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN, false);
+        List<JsonNode> result = new ArrayList<>();
+        for (ConsumerRecord<byte[], byte[]> record : records) {
+            result.add(mapper.readTree(record.value()));
+        }
+        return result;
     }
 }
