@@ -175,6 +175,8 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         final List<ConsumerRecord<byte[], byte[]>> collectedRecords =
                 drainAllRecordsFromTopic(topic, false, 0);
 
+        int expectedEventCount = 13;
+        waitUntilSpecificEventCount(collectedRecords.size(), expectedEventCount);
         assertThat(deserializeValues(collectedRecords))
                 .isEqualTo(getExpectedRecords("expectedEvents/kafka-debezium-json.txt"));
 
@@ -287,6 +289,26 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                             + event
                             + " from stdout: "
                             + taskManagerConsumer.toUtf8String());
+        }
+    }
+
+    private void waitUntilSpecificEventCount(int actualCount, int expectedCount) throws Exception {
+        boolean result = false;
+        long endTimeout = System.currentTimeMillis() + MysqlToKafkaE2eITCase.EVENT_WAITING_TIMEOUT;
+        while (System.currentTimeMillis() < endTimeout) {
+            String stdout = taskManagerConsumer.toUtf8String();
+            if (actualCount == expectedCount) {
+                result = true;
+                break;
+            }
+            Thread.sleep(1000);
+        }
+        if (!result) {
+            throw new TimeoutException(
+                    "failed to get specific event count: "
+                            + expectedCount
+                            + " from stdout: "
+                            + actualCount);
         }
     }
 
