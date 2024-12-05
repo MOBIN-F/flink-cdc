@@ -89,6 +89,7 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
     private static final short TOPIC_REPLICATION_FACTOR = 1;
     private TableId table;
     private String topic;
+    private KafkaConsumer<byte[], byte[]> consumer;
 
     @ClassRule
     public static final MySqlContainer MYSQL =
@@ -132,6 +133,9 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
     public void before() throws Exception {
         super.before();
         createTestTopic(1, TOPIC_REPLICATION_FACTOR);
+        Properties properties = getKafkaClientConfiguration();
+        consumer = new KafkaConsumer<>(properties);
+        consumer.subscribe(Collections.singletonList(topic));
         mysqlInventoryDatabase.createAndInitialize();
     }
 
@@ -185,8 +189,8 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         List<ConsumerRecord<byte[], byte[]>> collectedRecords = new ArrayList<>();
         int expectedEventCount = 13;
         waitUntilSpecificEventCount(collectedRecords, expectedEventCount);
-        assertThat(deserializeValues(collectedRecords))
-                .containsExactlyInAnyOrderElementsOf(getExpectedRecords("expectedEvents/kafka-debezium-json.txt"));
+        assertThat(getExpectedRecords("expectedEvents/kafka-debezium-json.txt"))
+                .containsAll(deserializeValues(collectedRecords));
         LOG.info("Begin incremental reading stage.");
         // generate binlogs
         String mysqlJdbcUrl =
@@ -217,8 +221,10 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
             LOG.error("Update table for CDC failed.", e);
             throw e;
         }
-
-        Thread.sleep(50000000);
+        expectedEventCount = 23;
+        waitUntilSpecificEventCount(collectedRecords, expectedEventCount);
+        assertThat(deserializeValues(collectedRecords))
+                .containsExactlyInAnyOrderElementsOf(getExpectedRecords("expectedEvents/kafka-debezium-json.txt"));
 
     }
 
@@ -226,12 +232,6 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
     private void waitUntilSpecificEventCount(List<ConsumerRecord<byte[], byte[]>>  actualEvent, int expectedCount) throws Exception {
         boolean result = false;
         long endTimeout = System.currentTimeMillis() + MysqlToKafkaE2eITCase.EVENT_WAITING_TIMEOUT;
-        Properties properties = getKafkaClientConfiguration();
-        properties.put("key.deserializer", ByteArrayDeserializer.class.getName());
-        properties.put("value.deserializer", ByteArrayDeserializer.class.getName());
-        KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(properties);
-        consumer.subscribe(Collections.singletonList(topic));
-
         while (System.currentTimeMillis() < endTimeout) {
             ConsumerRecords<byte[], byte[]> records = consumer.poll(Duration.ofSeconds(1));
             records.forEach(actualEvent::add);
@@ -250,15 +250,6 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         }
     }
 
-    private List<ConsumerRecord<byte[], byte[]>> drainAllRecordsFromTopic(
-            String topic, boolean committed, int... partitionArr) {
-        Properties properties = getKafkaClientConfiguration();
-        Set<Integer> partitions = new HashSet<>();
-        for (int partition : partitionArr) {
-            partitions.add(partition);
-        }
-        return KafkaUtil.drainAllRecordsFromTopic(topic, properties, committed, partitions);
-    }
 
     private static Properties getKafkaClientConfiguration() {
         final Properties standardProps = new Properties();
@@ -269,6 +260,8 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         standardProps.put("max.partition.fetch.bytes", 256);
         standardProps.put("zookeeper.session.timeout.ms", ZK_TIMEOUT_MILLIS);
         standardProps.put("zookeeper.connection.timeout.ms", ZK_TIMEOUT_MILLIS);
+        standardProps.put("key.deserializer", ByteArrayDeserializer.class.getName());
+        standardProps.put("value.deserializer", ByteArrayDeserializer.class.getName());
         return standardProps;
     }
 
