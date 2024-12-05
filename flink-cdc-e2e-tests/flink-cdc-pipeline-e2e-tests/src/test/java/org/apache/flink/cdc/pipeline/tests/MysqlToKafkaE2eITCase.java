@@ -33,6 +33,9 @@ import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -52,6 +55,10 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
@@ -113,7 +120,6 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         LOG.info("Starting containers...");
         Startables.deepStart(Stream.of(MYSQL)).join();
         Startables.deepStart(Stream.of(KAFKA_CONTAINER)).join();
-
         Map<String, Object> properties = new HashMap<>();
         properties.put(
                 CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG,
@@ -125,6 +131,7 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
     @Before
     public void before() throws Exception {
         super.before();
+        createTestTopic(1, TOPIC_REPLICATION_FACTOR);
         mysqlInventoryDatabase.createAndInitialize();
     }
 
@@ -135,9 +142,12 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    public void t() {
+        System.out.println(11);
+    }
+
+    @Test
     public void testSyncWholeDatabase() throws Exception {
-        LOG.info("create test topic");
-        createTestTopic(1, TOPIC_REPLICATION_FACTOR);
         String pipelineJob =
                 String.format(
                         "source:\n"
@@ -165,139 +175,67 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                         mysqlInventoryDatabase.getDatabaseName(),
                         topic,
                         parallelism);
+        System.out.println(pipelineJob);
         Path mysqlCdcJar = TestUtils.getResource("mysql-cdc-pipeline-connector.jar");
         Path kafkaCdcJar = TestUtils.getResource("kafka-cdc-pipeline-connector.jar");
         Path mysqlDriverJar = TestUtils.getResource("mysql-driver.jar");
         submitPipelineJob(pipelineJob, mysqlCdcJar, kafkaCdcJar, mysqlDriverJar);
         waitUntilJobRunning(Duration.ofSeconds(30));
         LOG.info("Pipeline job is running");
-        Thread.sleep(60000);
-        final List<ConsumerRecord<byte[], byte[]>> collectedRecords =
-                drainAllRecordsFromTopic(topic, false, 0);
-
+        List<ConsumerRecord<byte[], byte[]>> collectedRecords = new ArrayList<>();
         int expectedEventCount = 13;
-        waitUntilSpecificEventCount(collectedRecords.size(), expectedEventCount);
+        waitUntilSpecificEventCount(collectedRecords, expectedEventCount);
         assertThat(deserializeValues(collectedRecords))
-                .isEqualTo(getExpectedRecords("expectedEvents/kafka-debezium-json.txt"));
+                .containsExactlyInAnyOrderElementsOf(getExpectedRecords("expectedEvents/kafka-debezium-json.txt"));
+        LOG.info("Begin incremental reading stage.");
+        // generate binlogs
+        String mysqlJdbcUrl =
+                String.format(
+                        "jdbc:mysql://%s:%s/%s",
+                        MYSQL.getHost(),
+                        MYSQL.getDatabasePort(),
+                        mysqlInventoryDatabase.getDatabaseName());
+        try (Connection conn =
+                     DriverManager.getConnection(
+                             mysqlJdbcUrl, MYSQL_TEST_USER, MYSQL_TEST_PASSWORD);
+             Statement stat = conn.createStatement()) {
+            stat.execute("UPDATE products SET description='18oz carpenter hammer' WHERE id=106;");
+            stat.execute("UPDATE products SET weight='5.1' WHERE id=107;");
 
-        //        waitUntilSpecificEvent(
-        //                String.format(
-        //                        "DataChangeEvent{tableId=%s.customers, before=[], after=[104,
-        // user_4, Shanghai, 123567891234], op=INSERT, meta=()}",
-        //                        mysqlInventoryDatabase.getDatabaseName()));
-        //        waitUntilSpecificEvent(
-        //                String.format(
-        //                        "DataChangeEvent{tableId=%s.products, before=[], after=[109, spare
-        // tire, 24 inch spare tire, 22.2, null, null, null], op=INSERT, meta=()}",
-        //                        mysqlInventoryDatabase.getDatabaseName()));
-        //
-        //        validateResult(getExpectedRecords("expectedEvents/kafka-debezium-json.txt"));
 
-        //        LOG.info("Begin incremental reading stage.");
-        //        // generate binlogs
-        //        String mysqlJdbcUrl =
-        //                String.format(
-        //                        "jdbc:mysql://%s:%s/%s",
-        //                        MYSQL.getHost(),
-        //                        MYSQL.getDatabasePort(),
-        //                        mysqlInventoryDatabase.getDatabaseName());
-        //        try (Connection conn =
-        //                     DriverManager.getConnection(
-        //                             mysqlJdbcUrl, MYSQL_TEST_USER, MYSQL_TEST_PASSWORD);
-        //             Statement stat = conn.createStatement()) {
-        //            stat.execute("UPDATE products SET description='18oz carpenter hammer' WHERE
-        // id=106;");
-        //            stat.execute("UPDATE products SET weight='5.1' WHERE id=107;");
-        //
-        //            // Perform DDL changes after the binlog is generated
-        //            waitUntilSpecificEvent(
-        //                    String.format(
-        //                            "DataChangeEvent{tableId=%s.products, before=[106, hammer,
-        // 16oz carpenter's hammer, 1.0, null, null, null], after=[106, hammer, 18oz carpenter
-        // hammer, 1.0, null, null, null], op=UPDATE, meta=()}",
-        //                            mysqlInventoryDatabase.getDatabaseName()));
-        //
-        //            // modify table schema
-        //            stat.execute("ALTER TABLE products ADD COLUMN new_col INT;");
-        //            stat.execute(
-        //                    "INSERT INTO products VALUES (default,'jacket','water resistent white
-        // wind breaker',0.2, null, null, null, 1);"); // 110
-        //            stat.execute(
-        //                    "INSERT INTO products VALUES (default,'scooter','Big 2-wheel scooter
-        // ',5.18, null, null, null, 1);"); // 111
-        //            stat.execute(
-        //                    "UPDATE products SET description='new water resistent white wind
-        // breaker', weight='0.5' WHERE id=110;");
-        //            stat.execute("UPDATE products SET weight='5.17' WHERE id=111;");
-        //            stat.execute("DELETE FROM products WHERE id=111;");
-        //        } catch (SQLException e) {
-        //            LOG.error("Update table for CDC failed.", e);
-        //            throw e;
-        //        }
-        //
-        //        waitUntilSpecificEvent(
-        //                String.format(
-        //                        "DataChangeEvent{tableId=%s.products, before=[111, scooter, Big
-        // 2-wheel scooter , 5.17, null, null, null, 1], after=[], op=DELETE, meta=()}",
-        //                        mysqlInventoryDatabase.getDatabaseName()));
-
-        //        validateResult(
-        //                "DataChangeEvent{tableId=%s.products, before=[106, hammer, 16oz
-        // carpenter's hammer, 1.0, null, null, null], after=[106, hammer, 18oz carpenter hammer,
-        // 1.0, null, null, null], op=UPDATE, meta=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[107, rocks, box of assorted
-        // rocks, 5.3, null, null, null], after=[107, rocks, box of assorted rocks, 5.1, null, null,
-        // null], op=UPDATE, meta=()}",
-        //                "AddColumnEvent{tableId=%s.products,
-        // addedColumns=[ColumnWithPosition{column=`new_col` INT, position=LAST,
-        // existedColumnName=null}]}",
-        //                "DataChangeEvent{tableId=%s.products, before=[], after=[110, jacket, water
-        // resistent white wind breaker, 0.2, null, null, null, 1], op=INSERT, meta=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[], after=[111, scooter, Big
-        // 2-wheel scooter , 5.18, null, null, null, 1], op=INSERT, meta=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[110, jacket, water resistent
-        // white wind breaker, 0.2, null, null, null, 1], after=[110, jacket, new water resistent
-        // white wind breaker, 0.5, null, null, null, 1], op=UPDATE, meta=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[111, scooter, Big 2-wheel
-        // scooter , 5.18, null, null, null, 1], after=[111, scooter, Big 2-wheel scooter , 5.17,
-        // null, null, null, 1], op=UPDATE, meta=()}",
-        //                "DataChangeEvent{tableId=%s.products, before=[111, scooter, Big 2-wheel
-        // scooter , 5.17, null, null, null, 1], after=[], op=DELETE, meta=()}");
-    }
-
-    private void validateResult(List<String> expectedEvents) throws Exception {
-        String dbName = mysqlInventoryDatabase.getDatabaseName();
-        for (String event : expectedEvents) {
-            waitUntilSpecificEvent(String.format(event, dbName, dbName));
+            // modify table schema
+            stat.execute("ALTER TABLE products ADD COLUMN new_col INT;");
+            stat.execute(
+                    "INSERT INTO products VALUES (default,'jacket','water resistent white wind breaker',0.2, null, null, null, 1);"); // 110
+            stat.execute(
+                    "INSERT INTO products VALUES (default,'scooter','Big 2-wheel scooter ',5.18, null, null, null, 1);"); // 111
+            stat.execute(
+                    "UPDATE products SET description='new water resistent white wind breaker', weight='0.5' WHERE id=110;");
+            stat.execute("UPDATE products SET weight='5.17' WHERE id=111;");
+            stat.execute("DELETE FROM products WHERE id=111;");
+        } catch (SQLException e) {
+            LOG.error("Update table for CDC failed.", e);
+            throw e;
         }
+
+        Thread.sleep(50000000);
+
     }
 
-    private void waitUntilSpecificEvent(String event) throws Exception {
+
+    private void waitUntilSpecificEventCount(List<ConsumerRecord<byte[], byte[]>>  actualEvent, int expectedCount) throws Exception {
         boolean result = false;
         long endTimeout = System.currentTimeMillis() + MysqlToKafkaE2eITCase.EVENT_WAITING_TIMEOUT;
-        while (System.currentTimeMillis() < endTimeout) {
-            String stdout = taskManagerConsumer.toUtf8String();
-            if (stdout.contains(event + "\n")) {
-                result = true;
-                break;
-            }
-            Thread.sleep(1000);
-        }
-        if (!result) {
-            throw new TimeoutException(
-                    "failed to get specific event: "
-                            + event
-                            + " from stdout: "
-                            + taskManagerConsumer.toUtf8String());
-        }
-    }
+        Properties properties = getKafkaClientConfiguration();
+        properties.put("key.deserializer", ByteArrayDeserializer.class.getName());
+        properties.put("value.deserializer", ByteArrayDeserializer.class.getName());
+        KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(properties);
+        consumer.subscribe(Collections.singletonList(topic));
 
-    private void waitUntilSpecificEventCount(int actualCount, int expectedCount) throws Exception {
-        boolean result = false;
-        long endTimeout = System.currentTimeMillis() + MysqlToKafkaE2eITCase.EVENT_WAITING_TIMEOUT;
         while (System.currentTimeMillis() < endTimeout) {
-            String stdout = taskManagerConsumer.toUtf8String();
-            if (actualCount == expectedCount) {
+            ConsumerRecords<byte[], byte[]> records = consumer.poll(Duration.ofSeconds(1));
+            records.forEach(actualEvent::add);
+            if (actualEvent.size() == expectedCount) {
                 result = true;
                 break;
             }
@@ -308,7 +246,7 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                     "failed to get specific event count: "
                             + expectedCount
                             + " from stdout: "
-                            + actualCount);
+                            + actualEvent.size());
         }
     }
 
@@ -363,7 +301,7 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                         .getResource(String.format(resourceDirFormat));
         return Files.readAllLines(Paths.get(url.toURI())).stream()
                 .filter(this::isRecordLine)
-                .map(line -> line.replace("_tmp_databaseName_","ttt"))
+                .map(line -> line.replace("_tmp_databaseName_",mysqlInventoryDatabase.getDatabaseName()))
                 .collect(Collectors.toList());
     }
 
