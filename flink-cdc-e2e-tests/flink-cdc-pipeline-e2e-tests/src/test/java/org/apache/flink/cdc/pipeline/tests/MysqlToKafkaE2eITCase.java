@@ -363,7 +363,7 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                         .getResource(String.format(resourceDirFormat));
         return Files.readAllLines(Paths.get(url.toURI())).stream()
                 .filter(this::isRecordLine)
-                .map(line -> String.format(line, mysqlInventoryDatabase.getDatabaseName()))
+                .map(line -> line.replace("_tmp_databaseName_","ttt"))
                 .collect(Collectors.toList());
     }
 
