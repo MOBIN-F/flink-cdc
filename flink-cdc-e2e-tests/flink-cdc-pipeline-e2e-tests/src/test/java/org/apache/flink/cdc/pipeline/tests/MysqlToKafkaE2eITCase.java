@@ -24,9 +24,7 @@ import org.apache.flink.cdc.connectors.mysql.testutils.MySqlContainer;
 import org.apache.flink.cdc.connectors.mysql.testutils.MySqlVersion;
 import org.apache.flink.cdc.connectors.mysql.testutils.UniqueDatabase;
 import org.apache.flink.cdc.pipeline.tests.utils.PipelineTestEnvironment;
-import org.apache.flink.util.jackson.JacksonMapperFactory;
 
-import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -327,11 +325,8 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         result.all().get();
     }
 
-    private static List<String> deserializeValues(List<ConsumerRecord<byte[], byte[]>> records)
+    private List<String> deserializeValues(List<ConsumerRecord<byte[], byte[]>> records)
             throws IOException {
-        ObjectMapper mapper =
-                JacksonMapperFactory.createObjectMapper()
-                        .configure(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN, false);
         List<String> result = new ArrayList<>();
         for (ConsumerRecord<byte[], byte[]> record : records) {
             result.add(new String(record.value(), "UTF-8"));
@@ -346,6 +341,7 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                         .getResource(String.format(resourceDirFormat));
         return Files.readAllLines(Paths.get(url.toURI())).stream()
                 .filter(this::isRecordLine)
+                .map(line -> String.format(line, mysqlInventoryDatabase.getDatabaseName()))
                 .collect(Collectors.toList());
     }
 
