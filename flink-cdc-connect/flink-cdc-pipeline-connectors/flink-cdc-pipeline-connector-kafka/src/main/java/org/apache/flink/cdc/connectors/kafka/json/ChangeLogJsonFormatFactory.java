@@ -29,6 +29,7 @@ import org.apache.flink.formats.json.JsonFormatOptionsUtil;
 
 import java.time.ZoneId;
 
+import static org.apache.flink.cdc.connectors.kafka.utils.SerializationSchemaUtils.ignoreNullFields;
 import static org.apache.flink.formats.json.JsonFormatOptions.ENCODE_DECIMAL_AS_PLAIN_NUMBER;
 import static org.apache.flink.formats.json.debezium.DebeziumJsonFormatOptions.JSON_MAP_NULL_KEY_LITERAL;
 
@@ -60,6 +61,8 @@ public class ChangeLogJsonFormatFactory {
         final boolean encodeDecimalAsPlainNumber =
                 formatOptions.get(ENCODE_DECIMAL_AS_PLAIN_NUMBER);
 
+        final boolean ignoreNullFields = ignoreNullFields(formatOptions);
+
         switch (type) {
             case DEBEZIUM_JSON:
                 {
@@ -69,7 +72,8 @@ public class ChangeLogJsonFormatFactory {
                             mapNullKeyLiteral,
                             zoneId,
                             encodeDecimalAsPlainNumber,
-                            includeSchemaInfo);
+                            includeSchemaInfo,
+                            ignoreNullFields);
                 }
             case CANAL_JSON:
                 {

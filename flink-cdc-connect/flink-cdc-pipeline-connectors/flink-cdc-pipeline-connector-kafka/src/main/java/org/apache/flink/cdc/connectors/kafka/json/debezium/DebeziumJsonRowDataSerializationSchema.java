@@ -32,6 +32,8 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.lang.reflect.Constructor;
+import java.util.Arrays;
 import java.util.Objects;
 
 /**
@@ -72,22 +74,30 @@ public class DebeziumJsonRowDataSerializationSchema implements SerializationSche
 
     private final boolean includeSchemaInfo;
 
+    private final boolean ignoreNullFields;
+
     public DebeziumJsonRowDataSerializationSchema(
             RowType rowType,
             TimestampFormat timestampFormat,
             JsonFormatOptions.MapNullKeyMode mapNullKeyMode,
             String mapNullKeyLiteral,
             boolean encodeDecimalAsPlainNumber,
-            boolean includeSchemaInfo) {
+            boolean includeSchemaInfo,
+            boolean ignoreNullFields) {
         this.rowType = rowType;
         this.timestampFormat = timestampFormat;
         this.mapNullKeyMode = mapNullKeyMode;
         this.mapNullKeyLiteral = mapNullKeyLiteral;
         this.encodeDecimalAsPlainNumber = encodeDecimalAsPlainNumber;
         this.runtimeConverter =
-                new RowDataToJsonConverters(timestampFormat, mapNullKeyMode, mapNullKeyLiteral)
+                createRowDataToJsonConverters(
+                                timestampFormat,
+                                mapNullKeyMode,
+                                mapNullKeyLiteral,
+                                ignoreNullFields)
                         .createConverter(rowType);
         this.includeSchemaInfo = includeSchemaInfo;
+        this.ignoreNullFields = ignoreNullFields;
     }
 
     @Override
@@ -144,5 +154,44 @@ public class DebeziumJsonRowDataSerializationSchema implements SerializationSche
                 mapNullKeyMode,
                 mapNullKeyLiteral,
                 encodeDecimalAsPlainNumber);
+    }
+
+    public static RowDataToJsonConverters createRowDataToJsonConverters(
+            TimestampFormat timestampFormat,
+            JsonFormatOptions.MapNullKeyMode mapNullKeyMode,
+            String mapNullKeyLiteral,
+            boolean ignoreNullFields) {
+        try {
+            Class<?>[] fullParams =
+                    new Class[] {
+                        TimestampFormat.class,
+                        JsonFormatOptions.MapNullKeyMode.class,
+                        String.class,
+                        boolean.class // Flink 1.20
+                    };
+
+            Object[] fullParamValues =
+                    new Object[] {
+                        timestampFormat, mapNullKeyMode, mapNullKeyLiteral, ignoreNullFields
+                    };
+
+            Class<?> serializerClass = RowDataToJsonConverters.class;
+
+            for (int i = fullParams.length; i >= 3; i--) {
+                try {
+                    Constructor<?> constructor =
+                            serializerClass.getConstructor(Arrays.copyOfRange(fullParams, 0, i));
+
+                    return (RowDataToJsonConverters)
+                            constructor.newInstance(Arrays.copyOfRange(fullParamValues, 0, i));
+
+                } catch (NoSuchMethodException ignored) {
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create RowDataToJsonConverters", e);
+        }
+        throw new RuntimeException(
+                "Failed to find appropriate constructor for RowDataToJsonConverters");
     }
 }

@@ -88,13 +88,16 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
 
     private final boolean includeSchemaInfo;
 
+    private final boolean ignoreNullFields;
+
     public DebeziumJsonSerializationSchema(
             TimestampFormat timestampFormat,
             JsonFormatOptions.MapNullKeyMode mapNullKeyMode,
             String mapNullKeyLiteral,
             ZoneId zoneId,
             boolean encodeDecimalAsPlainNumber,
-            boolean includeSchemaInfo) {
+            boolean includeSchemaInfo,
+            boolean ignoreNullFields) {
         this.timestampFormat = timestampFormat;
         this.mapNullKeyMode = mapNullKeyMode;
         this.mapNullKeyLiteral = mapNullKeyLiteral;
@@ -102,6 +105,7 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
         this.zoneId = zoneId;
         jsonSerializers = new HashMap<>();
         this.includeSchemaInfo = includeSchemaInfo;
+        this.ignoreNullFields = ignoreNullFields;
     }
 
     @Override
@@ -140,7 +144,8 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
                             mapNullKeyMode,
                             mapNullKeyLiteral,
                             encodeDecimalAsPlainNumber,
-                            includeSchemaInfo);
+                            includeSchemaInfo,
+                            ignoreNullFields);
             try {
                 jsonSerializer.open(context);
             } catch (Exception e) {
