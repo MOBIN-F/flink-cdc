@@ -39,7 +39,6 @@ import org.apache.flink.formats.json.JsonRowDataSerializationSchema;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
 
-import java.lang.reflect.Constructor;
 import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
@@ -132,36 +131,11 @@ public class JsonSerializationSchema implements SerializationSchema<Event> {
         // the row should never be null
         DataType dataType = DataTypes.ROW(fields).notNull();
         LogicalType rowType = DataTypeUtils.toFlinkDataType(dataType).getLogicalType();
-        try {
-            return new JsonRowDataSerializationSchema(
-                    (RowType) rowType,
-                    timestampFormat,
-                    mapNullKeyMode,
-                    mapNullKeyLiteral,
-                    encodeDecimalAsPlainNumber);
-        } catch (NoSuchMethodError e) {
-            try {
-                Constructor<?> constructor =
-                        JsonRowDataSerializationSchema.class.getConstructor(
-                                RowType.class,
-                                TimestampFormat.class,
-                                JsonFormatOptions.MapNullKeyMode.class,
-                                String.class,
-                                boolean.class,
-                                boolean.class);
-                return (JsonRowDataSerializationSchema)
-                        constructor.newInstance(
-                                (RowType) rowType,
-                                timestampFormat,
-                                mapNullKeyMode,
-                                mapNullKeyLiteral,
-                                encodeDecimalAsPlainNumber,
-                                true);
-            } catch (Exception ex) {
-                throw new RuntimeException("Failed to create JsonRowDataSerializationSchema", ex);
-            }
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to create JsonRowDataSerializationSchema", e);
-        }
+        return new JsonRowDataSerializationSchema(
+                (RowType) rowType,
+                timestampFormat,
+                mapNullKeyMode,
+                mapNullKeyLiteral,
+                encodeDecimalAsPlainNumber);
     }
 }

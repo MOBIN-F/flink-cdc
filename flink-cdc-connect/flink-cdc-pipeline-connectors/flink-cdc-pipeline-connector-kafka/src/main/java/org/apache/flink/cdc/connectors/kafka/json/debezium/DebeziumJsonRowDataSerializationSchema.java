@@ -17,11 +17,11 @@
 
 package org.apache.flink.cdc.connectors.kafka.json.debezium;
 
+import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.formats.common.TimestampFormat;
 import org.apache.flink.formats.json.JsonFormatOptions;
 import org.apache.flink.formats.json.JsonParserRowDataDeserializationSchema;
 import org.apache.flink.formats.json.JsonRowDataDeserializationSchema;
-import org.apache.flink.formats.json.JsonRowDataSerializationSchema;
 import org.apache.flink.formats.json.RowDataToJsonConverters;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
@@ -43,7 +43,7 @@ import java.util.Objects;
  * <p>Result <code>byte[]</code> messages can be deserialized using {@link
  * JsonRowDataDeserializationSchema} or {@link JsonParserRowDataDeserializationSchema}.
  */
-public class DebeziumJsonRowDataSerializationSchema extends JsonRowDataSerializationSchema {
+public class DebeziumJsonRowDataSerializationSchema implements SerializationSchema<RowData> {
     private static final long serialVersionUID = 1L;
 
     /** RowType to generate the runtime converter. */
@@ -79,12 +79,6 @@ public class DebeziumJsonRowDataSerializationSchema extends JsonRowDataSerializa
             String mapNullKeyLiteral,
             boolean encodeDecimalAsPlainNumber,
             boolean includeSchemaInfo) {
-        super(
-                rowType,
-                timestampFormat,
-                mapNullKeyMode,
-                mapNullKeyLiteral,
-                encodeDecimalAsPlainNumber);
         this.rowType = rowType;
         this.timestampFormat = timestampFormat;
         this.mapNullKeyMode = mapNullKeyMode;
