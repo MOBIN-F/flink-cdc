@@ -97,16 +97,6 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
     private String topic;
     private KafkaConsumer<byte[], byte[]> consumer;
 
-    @Parameterized.Parameters(name = "flinkVersion: {0}")
-    public static List<String> getFlinkVersion() {
-        String flinkVersion = System.getProperty("specifiedFlinkVersion");
-        if (flinkVersion != null) {
-            return Collections.singletonList(flinkVersion);
-        } else {
-            return Arrays.asList("1.19.1");
-        }
-    }
-
     @ClassRule
     public static final MySqlContainer MYSQL =
             (MySqlContainer)
