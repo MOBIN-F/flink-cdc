@@ -73,13 +73,15 @@ public class MySqlEventDeserializer extends DebeziumEventDeserializationSchema {
     public MySqlEventDeserializer(
             DebeziumChangelogMode changelogMode,
             boolean includeSchemaChanges,
-            boolean tinyInt1isBit) {
+            boolean tinyInt1isBit,
+            boolean includeSchemaInfo) {
         this(
                 changelogMode,
                 includeSchemaChanges,
                 new ArrayList<>(),
                 includeSchemaChanges,
-                tinyInt1isBit);
+                tinyInt1isBit,
+                includeSchemaInfo);
     }
 
     public MySqlEventDeserializer(
@@ -87,12 +89,15 @@ public class MySqlEventDeserializer extends DebeziumEventDeserializationSchema {
             boolean includeSchemaChanges,
             List<MySqlReadableMetadata> readableMetadataList,
             boolean includeComments,
-            boolean tinyInt1isBit) {
+            boolean tinyInt1isBit,
+            boolean includeSchemaInfo) {
         super(new MySqlSchemaDataTypeInference(), changelogMode);
         this.includeSchemaChanges = includeSchemaChanges;
         this.readableMetadataList = readableMetadataList;
         this.includeComments = includeComments;
         this.tinyInt1isBit = tinyInt1isBit;
+        this.includeSchemaChanges = includeSchemaChanges;
+
     }
 
     @Override

@@ -72,7 +72,8 @@ public class MySqlDataSource implements DataSource {
                         sourceConfig.isIncludeSchemaChanges(),
                         readableMetadataList,
                         includeComments,
-                        sourceConfig.isTreatTinyInt1AsBoolean());
+                        sourceConfig.isTreatTinyInt1AsBoolean(),
+                        sourceConfig.isIncludeSchemaInfo());
 
         MySqlSource<Event> source =
                 new MySqlSource<>(

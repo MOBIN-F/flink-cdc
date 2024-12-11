@@ -22,7 +22,6 @@ import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.cdc.common.event.Event;
 import org.apache.flink.cdc.connectors.kafka.json.canal.CanalJsonSerializationSchema;
 import org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonSerializationSchema;
-import org.apache.flink.cdc.connectors.kafka.utils.JsonRowDataSerializationSchemaUtils;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.formats.common.TimestampFormat;
 import org.apache.flink.formats.json.JsonFormatOptions;
@@ -49,7 +48,10 @@ public class ChangeLogJsonFormatFactory {
      * @return The configured instance of {@link SerializationSchema}.
      */
     public static SerializationSchema<Event> createSerializationSchema(
-            ReadableConfig formatOptions, JsonSerializationType type, ZoneId zoneId) {
+            ReadableConfig formatOptions,
+            JsonSerializationType type,
+            ZoneId zoneId,
+            boolean includeSchemaInfo) {
         TimestampFormat timestampFormat = JsonFormatOptionsUtil.getTimestampFormat(formatOptions);
         JsonFormatOptions.MapNullKeyMode mapNullKeyMode =
                 JsonFormatOptionsUtil.getMapNullKeyMode(formatOptions);
@@ -70,7 +72,8 @@ public class ChangeLogJsonFormatFactory {
                             mapNullKeyLiteral,
                             zoneId,
                             encodeDecimalAsPlainNumber,
-                            ignoreNullFields);
+                            ignoreNullFields,
+                            includeSchemaInfo);
                 }
             case CANAL_JSON:
                 {

@@ -100,4 +100,12 @@ public class KafkaDataSinkOptions {
                                     .text(
                                             ". For example, we can set 'sink.tableId-to-topic.mappingg' like 'mydb.mytable1:topic1;mydb.mytable2:topic2'.")
                                     .build());
+
+    public static final ConfigOption<Boolean> SINK_SCHEMA_INFO_ENABLED =
+            key("sink.schema-info-enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Whether receive schema info, by default is false. If set to true and the 'schema-info.enabled' parameter in source is also true, the column type info will be sent and increase message size.");
+
 }
