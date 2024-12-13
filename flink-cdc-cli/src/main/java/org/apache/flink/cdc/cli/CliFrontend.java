@@ -26,9 +26,10 @@ import org.apache.flink.cdc.common.configuration.Configuration;
 import org.apache.flink.cdc.common.utils.StringUtils;
 import org.apache.flink.cdc.composer.PipelineExecution;
 import org.apache.flink.core.fs.Path;
-import org.apache.flink.runtime.jobgraph.RestoreMode;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
+
+import org.apache.flink.shaded.guava31.com.google.common.base.Joiner;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -38,9 +39,8 @@ import org.apache.commons.cli.Options;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.lang.reflect.InvocationTargetException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -225,7 +225,8 @@ public class CliFrontend {
         String flinkCdcHome = System.getenv(FLINK_CDC_HOME_ENV_VAR);
         if (flinkCdcHome != null) {
             Path globalConfigPath =
-                    Paths.get(flinkCdcHome).resolve("conf").resolve("flink-cdc.yaml");
+                    new Path(
+                            flinkCdcHome, Joiner.on(File.separator).join("conf", "flink-cdc.yaml"));
             LOG.info("Using global config in FLINK_CDC_HOME: {}", globalConfigPath);
             return ConfigurationUtils.loadConfigFile(globalConfigPath);
         }
