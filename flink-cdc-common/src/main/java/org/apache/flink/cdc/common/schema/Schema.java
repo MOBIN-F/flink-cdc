@@ -230,7 +230,9 @@ public class Schema implements Serializable {
         if (!partitionKeys.isEmpty()) {
             sb.append(", partitionKeys=").append(String.join(";", partitionKeys));
         }
-        sb.append(", comment=").append(comment);
+        if (comment!= null) {
+            sb.append(", comment=").append(comment);
+        }
         sb.append(", options=").append(describeOptions());
 
         return sb.toString();
