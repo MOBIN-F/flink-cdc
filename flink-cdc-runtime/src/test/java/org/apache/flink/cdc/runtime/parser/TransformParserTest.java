@@ -328,8 +328,8 @@ public class TransformParserTest {
         List<String> expected =
                 Arrays.asList(
                         "ProjectionColumn{column=`id` INT 'id', expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
-                        "ProjectionColumn{column=`name` STRING, expression='UPPER(`TB`.`name`)', scriptExpression='upper(name)', originalColumnNames=[name], transformExpressionKey=null}",
-                        "ProjectionColumn{column=`newage` INT, expression='`TB`.`age` + 1', scriptExpression='age + 1', originalColumnNames=[age], transformExpressionKey=null}",
+                        "ProjectionColumn{column=`name` STRING 'string', expression='UPPER(`TB`.`name`)', scriptExpression='upper(name)', originalColumnNames=[name], transformExpressionKey=null}",
+                        "ProjectionColumn{column=`newage` INT 'age', expression='`TB`.`age` + 1', scriptExpression='age + 1', originalColumnNames=[age], transformExpressionKey=null}",
                         "ProjectionColumn{column=`bmi` DOUBLE, expression='`TB`.`weight` / (`TB`.`height` * `TB`.`height`)', scriptExpression='weight / height * height', originalColumnNames=[weight, height, height], transformExpressionKey=null}");
         Assertions.assertThat(result.toString()).isEqualTo("[" + String.join(", ", expected) + "]");
 
@@ -342,11 +342,11 @@ public class TransformParserTest {
         List<String> metadataExpected =
                 Arrays.asList(
                         "ProjectionColumn{column=`id` INT 'id', expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
-                        "ProjectionColumn{column=`name` STRING, expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
-                        "ProjectionColumn{column=`age` INT, expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
-                        "ProjectionColumn{column=`address` STRING, expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
-                        "ProjectionColumn{column=`weight` DOUBLE, expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
-                        "ProjectionColumn{column=`height` DOUBLE, expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
+                        "ProjectionColumn{column=`name` STRING 'string', expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
+                        "ProjectionColumn{column=`age` INT 'age', expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
+                        "ProjectionColumn{column=`address` STRING 'address', expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
+                        "ProjectionColumn{column=`weight` DOUBLE 'weight', expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
+                        "ProjectionColumn{column=`height` DOUBLE 'height', expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
                         "ProjectionColumn{column=`__namespace_name__` STRING NOT NULL, expression='__namespace_name__', scriptExpression='__namespace_name__', originalColumnNames=[__namespace_name__], transformExpressionKey=null}",
                         "ProjectionColumn{column=`__schema_name__` STRING NOT NULL, expression='__schema_name__', scriptExpression='__schema_name__', originalColumnNames=[__schema_name__], transformExpressionKey=null}",
                         "ProjectionColumn{column=`__table_name__` STRING NOT NULL, expression='__table_name__', scriptExpression='__table_name__', originalColumnNames=[__table_name__], transformExpressionKey=null}");
