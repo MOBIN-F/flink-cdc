@@ -328,8 +328,8 @@ public class TransformParserTest {
         List<String> expected =
                 Arrays.asList(
                         "ProjectionColumn{column=`id` INT 'id', expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
-                        "ProjectionColumn{column=`name` STRING 'string', expression='UPPER(`TB`.`name`)', scriptExpression='upper(name)', originalColumnNames=[name], transformExpressionKey=null}",
-                        "ProjectionColumn{column=`newage` INT 'age', expression='`TB`.`age` + 1', scriptExpression='age + 1', originalColumnNames=[age], transformExpressionKey=null}",
+                        "ProjectionColumn{column=`name` STRING, expression='UPPER(`TB`.`name`)', scriptExpression='upper(name)', originalColumnNames=[name], transformExpressionKey=null}",
+                        "ProjectionColumn{column=`newage` INT, expression='`TB`.`age` + 1', scriptExpression='age + 1', originalColumnNames=[age], transformExpressionKey=null}",
                         "ProjectionColumn{column=`bmi` DOUBLE, expression='`TB`.`weight` / (`TB`.`height` * `TB`.`height`)', scriptExpression='weight / height * height', originalColumnNames=[weight, height, height], transformExpressionKey=null}");
         Assertions.assertThat(result.toString()).isEqualTo("[" + String.join(", ", expected) + "]");
 
