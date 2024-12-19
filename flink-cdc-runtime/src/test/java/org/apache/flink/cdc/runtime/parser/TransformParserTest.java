@@ -327,7 +327,7 @@ public class TransformParserTest {
 
         List<String> expected =
                 Arrays.asList(
-                        "ProjectionColumn{column=`id` INT, expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
+                        "ProjectionColumn{column=`id` INT 'id', expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
                         "ProjectionColumn{column=`name` STRING, expression='UPPER(`TB`.`name`)', scriptExpression='upper(name)', originalColumnNames=[name], transformExpressionKey=null}",
                         "ProjectionColumn{column=`newage` INT, expression='`TB`.`age` + 1', scriptExpression='age + 1', originalColumnNames=[age], transformExpressionKey=null}",
                         "ProjectionColumn{column=`bmi` DOUBLE, expression='`TB`.`weight` / (`TB`.`height` * `TB`.`height`)', scriptExpression='weight / height * height', originalColumnNames=[weight, height, height], transformExpressionKey=null}");
@@ -341,7 +341,7 @@ public class TransformParserTest {
 
         List<String> metadataExpected =
                 Arrays.asList(
-                        "ProjectionColumn{column=`id` INT, expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
+                        "ProjectionColumn{column=`id` INT 'id', expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
                         "ProjectionColumn{column=`name` STRING, expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
                         "ProjectionColumn{column=`age` INT, expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
                         "ProjectionColumn{column=`address` STRING, expression='null', scriptExpression='null', originalColumnNames=null, transformExpressionKey=null}",
