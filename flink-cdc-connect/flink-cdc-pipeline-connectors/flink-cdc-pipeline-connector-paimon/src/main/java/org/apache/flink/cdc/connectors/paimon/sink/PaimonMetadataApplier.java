@@ -162,7 +162,7 @@ public class PaimonMetadataApplier implements MetadataApplier {
 
     private void applyCreateTable(CreateTableEvent event) throws SchemaEvolveException {
         try {
-            if (!catalog.databaseExists(event.tableId().getSchemaName())) {
+            if (catalog.getDatabase(event.tableId().getSchemaName()) == null) {
                 catalog.createDatabase(event.tableId().getSchemaName(), true);
             }
             Schema schema = event.getSchema();
