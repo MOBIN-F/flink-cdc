@@ -253,6 +253,11 @@ public class MySqlSourceBuilder<T> {
         return this;
     }
 
+    public MySqlSourceBuilder<T> isCastTinyIntToInt(boolean isCastTinyIntToInt) {
+        this.configFactory.skipSnapshotBackfill(isCastTinyIntToInt);
+        return this;
+    }
+
     /**
      * Whether to close idle readers at the end of the snapshot phase. This feature depends on
      * FLIP-147: Support Checkpoints After Tasks Finished. The flink version is required to be

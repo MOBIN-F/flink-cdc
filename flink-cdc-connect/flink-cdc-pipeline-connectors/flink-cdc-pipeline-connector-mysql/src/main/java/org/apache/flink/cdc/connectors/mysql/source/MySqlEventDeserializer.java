@@ -60,6 +60,7 @@ public class MySqlEventDeserializer extends DebeziumEventDeserializationSchema {
 
     private final boolean includeSchemaChanges;
     private final boolean includeComments;
+    private final boolean isCastTinyIntToInt;
 
     private transient Tables tables;
     private transient CustomMySqlAntlrDdlParser customParser;
@@ -67,17 +68,19 @@ public class MySqlEventDeserializer extends DebeziumEventDeserializationSchema {
     public MySqlEventDeserializer(
             DebeziumChangelogMode changelogMode,
             boolean includeSchemaChanges,
-            boolean includeComments) {
+            boolean includeComments,
+            boolean isCastTinyIntToInt) {
         super(new MySqlSchemaDataTypeInference(), changelogMode);
         this.includeSchemaChanges = includeSchemaChanges;
         this.includeComments = includeComments;
+        this.isCastTinyIntToInt = isCastTinyIntToInt;
     }
 
     @Override
     protected List<SchemaChangeEvent> deserializeSchemaChangeRecord(SourceRecord record) {
         if (includeSchemaChanges) {
             if (customParser == null) {
-                customParser = new CustomMySqlAntlrDdlParser(includeComments);
+                customParser = new CustomMySqlAntlrDdlParser(includeComments, isCastTinyIntToInt);
                 tables = new Tables();
             }
 

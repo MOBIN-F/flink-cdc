@@ -45,13 +45,15 @@ public class ChunkUtils {
     private ChunkUtils() {}
 
     public static RowType getChunkKeyColumnType(
-            Table table, Map<ObjectPath, String> chunkKeyColumns) {
-        return getChunkKeyColumnType(getChunkKeyColumn(table, chunkKeyColumns));
+            Table table, Map<ObjectPath, String> chunkKeyColumns, boolean isCastTinyIntToInt) {
+        return getChunkKeyColumnType(getChunkKeyColumn(table, chunkKeyColumns), isCastTinyIntToInt);
     }
 
-    public static RowType getChunkKeyColumnType(Column chunkKeyColumn) {
+    public static RowType getChunkKeyColumnType(Column chunkKeyColumn, boolean isCastTinyIntToInt) {
         return (RowType)
-                ROW(FIELD(chunkKeyColumn.name(), MySqlTypeUtils.fromDbzColumn(chunkKeyColumn)))
+                ROW(FIELD(
+                                chunkKeyColumn.name(),
+                                MySqlTypeUtils.fromDbzColumn(chunkKeyColumn, isCastTinyIntToInt)))
                         .getLogicalType();
     }
 

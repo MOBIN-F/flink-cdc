@@ -56,6 +56,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.cdc.connectors.mysql.source.MySqlDataSourceOptions.CAST_TINYINT_TO_INT;
 import static org.apache.flink.cdc.connectors.mysql.source.MySqlDataSourceOptions.CHUNK_KEY_EVEN_DISTRIBUTION_FACTOR_LOWER_BOUND;
 import static org.apache.flink.cdc.connectors.mysql.source.MySqlDataSourceOptions.CHUNK_KEY_EVEN_DISTRIBUTION_FACTOR_UPPER_BOUND;
 import static org.apache.flink.cdc.connectors.mysql.source.MySqlDataSourceOptions.CHUNK_META_GROUP_SIZE;
@@ -130,6 +131,7 @@ public class MySqlDataSourceFactory implements DataSourceFactory {
 
         boolean closeIdleReaders = config.get(SCAN_INCREMENTAL_CLOSE_IDLE_READER_ENABLED);
         boolean includeComments = config.get(INCLUDE_COMMENTS_ENABLED);
+        boolean isCastTinyToInt = config.get(CAST_TINYINT_TO_INT);
 
         Duration heartbeatInterval = config.get(HEARTBEAT_INTERVAL);
         Duration connectTimeout = config.get(CONNECT_TIMEOUT);
@@ -179,6 +181,7 @@ public class MySqlDataSourceFactory implements DataSourceFactory {
                         .connectionPoolSize(connectionPoolSize)
                         .closeIdleReaders(closeIdleReaders)
                         .includeSchemaChanges(includeSchemaChanges)
+                        .isCastTinyIntToInt(isCastTinyToInt)
                         .debeziumProperties(getDebeziumProperties(configMap))
                         .jdbcProperties(getJdbcProperties(configMap))
                         .scanNewlyAddedTableEnabled(scanNewlyAddedTableEnabled);
@@ -288,6 +291,7 @@ public class MySqlDataSourceFactory implements DataSourceFactory {
         options.add(CHUNK_KEY_EVEN_DISTRIBUTION_FACTOR_LOWER_BOUND);
         options.add(SCAN_BINLOG_NEWLY_ADDED_TABLE_ENABLED);
         options.add(INCLUDE_COMMENTS_ENABLED);
+        options.add(CAST_TINYINT_TO_INT);
         return options;
     }
 

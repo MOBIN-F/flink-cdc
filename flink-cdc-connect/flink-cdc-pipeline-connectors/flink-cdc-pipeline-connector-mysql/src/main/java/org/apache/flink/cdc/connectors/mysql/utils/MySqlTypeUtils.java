@@ -110,8 +110,8 @@ public class MySqlTypeUtils {
     private static final int FLOAT_LENGTH_UNSPECIFIED_FLAG = -1;
 
     /** Returns a corresponding Flink data type from a debezium {@link Column}. */
-    public static DataType fromDbzColumn(Column column) {
-        DataType dataType = convertFromColumn(column);
+    public static DataType fromDbzColumn(Column column, boolean isCastTinyIntToInt) {
+        DataType dataType = convertFromColumn(column, isCastTinyIntToInt);
         if (column.isOptional()) {
             return dataType;
         } else {
@@ -123,7 +123,7 @@ public class MySqlTypeUtils {
      * Returns a corresponding Flink data type from a debezium {@link Column} with nullable always
      * be true.
      */
-    private static DataType convertFromColumn(Column column) {
+    private static DataType convertFromColumn(Column column, boolean isCastTinyIntToInt) {
         String typeName = column.typeName();
         switch (typeName) {
             case BIT:
@@ -138,7 +138,13 @@ public class MySqlTypeUtils {
                 // user should not use tinyint(1) to store number although jdbc url parameter
                 // tinyInt1isBit=false can help change the return value, it's not a general way
                 // btw: mybatis and mysql-connector-java map tinyint(1) to boolean by default
-                return column.length() == 1 ? DataTypes.BOOLEAN() : DataTypes.TINYINT();
+                if (isCastTinyIntToInt) {
+                    return DataTypes.INT();
+                } else if (column.length() == 1) {
+                    return DataTypes.BOOLEAN();
+                } else {
+                    return DataTypes.TINYINT();
+                }
             case TINYINT_UNSIGNED:
             case TINYINT_UNSIGNED_ZEROFILL:
             case SMALLINT:

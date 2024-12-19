@@ -281,4 +281,11 @@ public class MySqlDataSourceOptions {
                     .withDescription(
                             "Whether enable include table and column comments, by default is false, if set to true, table and column comments will be sent. "
                                     + "Note: Enable this option will bring the implications on memory usage.");
+
+    @Experimental
+    public static final ConfigOption<Boolean> CAST_TINYINT_TO_INT =
+            ConfigOptions.key("cast.tinyint.to.int")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription("cast tinyint to int");
 }
