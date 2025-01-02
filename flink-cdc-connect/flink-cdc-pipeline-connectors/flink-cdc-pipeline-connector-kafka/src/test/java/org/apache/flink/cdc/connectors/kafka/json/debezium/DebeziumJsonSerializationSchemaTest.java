@@ -18,6 +18,8 @@
 package org.apache.flink.cdc.connectors.kafka.json.debezium;
 
 import org.apache.flink.api.common.serialization.SerializationSchema;
+import org.apache.flink.cdc.common.configuration.Configuration;
+import org.apache.flink.cdc.common.data.TimestampData;
 import org.apache.flink.cdc.common.data.DecimalData;
 import org.apache.flink.cdc.common.data.LocalZonedTimestampData;
 import org.apache.flink.cdc.common.data.TimestampData;
@@ -29,19 +31,22 @@ import org.apache.flink.cdc.common.event.TableId;
 import org.apache.flink.cdc.common.schema.Schema;
 import org.apache.flink.cdc.common.types.DataTypes;
 import org.apache.flink.cdc.common.types.RowType;
-import org.apache.flink.cdc.connectors.kafka.json.ChangeLogJsonFormatFactory;
-import org.apache.flink.cdc.connectors.kafka.json.JsonSerializationType;
+import org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptionsUtil;
+import org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonSerializationSchema;
 import org.apache.flink.cdc.connectors.kafka.json.MockInitializationContext;
 import org.apache.flink.cdc.runtime.typeutils.BinaryRecordDataGenerator;
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.formats.common.TimestampFormat;
+import org.apache.flink.formats.json.JsonFormatOptions;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
 
+import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableMap;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.Test;
 
+import java.sql.Timestamp;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -49,6 +54,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
+import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.ENCODE_DECIMAL_AS_PLAIN_NUMBER;
+import static org.apache.flink.cdc.connectors.kafka.format.canal.CanalJsonFormatOptions.JSON_MAP_NULL_KEY_LITERAL;
 
 /** Tests for {@link DebeziumJsonSerializationSchema}. */
 class DebeziumJsonSerializationSchemaTest {
@@ -61,11 +69,20 @@ class DebeziumJsonSerializationSchemaTest {
         ObjectMapper mapper =
                 JacksonMapperFactory.createObjectMapper()
                         .configure(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN, false);
+        Configuration formatOptions = new Configuration();
+        TimestampFormat timestampFormat = JsonFormatOptionsUtil.getTimestampFormat(formatOptions);
+        JsonFormatOptions.MapNullKeyMode mapNullKeyMode =
+                JsonFormatOptionsUtil.getMapNullKeyMode(formatOptions);
+        String mapNullKeyLiteral = formatOptions.get(JSON_MAP_NULL_KEY_LITERAL);
+
+        Boolean encodeDecimalAsPlainNumber = formatOptions.get(ENCODE_DECIMAL_AS_PLAIN_NUMBER);
         SerializationSchema<Event> serializationSchema =
-                ChangeLogJsonFormatFactory.createSerializationSchema(
-                        new Configuration(),
-                        JsonSerializationType.DEBEZIUM_JSON,
-                        ZoneId.systemDefault());
+                new DebeziumJsonSerializationSchema(
+                        timestampFormat,
+                        mapNullKeyMode,
+                        mapNullKeyLiteral,
+                        ZoneId.systemDefault(),
+                        encodeDecimalAsPlainNumber);
         serializationSchema.open(new MockInitializationContext());
         // create table
         Schema schema =
@@ -244,5 +261,106 @@ class DebeziumJsonSerializationSchemaTest {
                         "{\"schema\":{\"type\":\"struct\",\"fields\":[{\"type\":\"struct\",\"fields\":[{\"type\":\"boolean\",\"optional\":true,\"doc\":\"_boolean comment\",\"field\":\"_boolean\"},{\"type\":\"bytes\",\"optional\":true,\"name\":\"io.debezium.data.Bits\",\"version\":1,\"parameters\":{\"length\":\"3\"},\"field\":\"_binary\"},{\"type\":\"bytes\",\"optional\":true,\"name\":\"io.debezium.data.Bits\",\"version\":1,\"parameters\":{\"length\":\"10\"},\"field\":\"_varbinary\"},{\"type\":\"bytes\",\"optional\":true,\"name\":\"io.debezium.data.Bits\",\"version\":1,\"parameters\":{\"length\":\"2147483647\"},\"field\":\"_bytes\"},{\"type\":\"int16\",\"optional\":true,\"field\":\"_tinyint\"},{\"type\":\"int16\",\"optional\":true,\"field\":\"_smallint\"},{\"type\":\"int32\",\"optional\":true,\"field\":\"_int\"},{\"type\":\"int64\",\"optional\":true,\"field\":\"_bigint\"},{\"type\":\"float\",\"optional\":true,\"field\":\"_float\"},{\"type\":\"double\",\"optional\":true,\"field\":\"_double\"},{\"type\":\"bytes\",\"optional\":true,\"name\":\"org.apache.kafka.connect.data.Decimal\",\"version\":1,\"parameters\":{\"scale\":\"3\",\"connect.decimal.precision\":\"6\"},\"field\":\"_decimal\"},{\"type\":\"string\",\"optional\":true,\"field\":\"_char\"},{\"type\":\"string\",\"optional\":true,\"field\":\"_varchar\"},{\"type\":\"string\",\"optional\":true,\"field\":\"_string\"},{\"type\":\"int32\",\"optional\":true,\"name\":\"io.debezium.time.Date\",\"version\":1,\"field\":\"_date\"},{\"type\":\"int64\",\"optional\":true,\"name\":\"io.debezium.time.MicroTime\",\"version\":1,\"field\":\"_time\"},{\"type\":\"int64\",\"optional\":true,\"name\":\"io.debezium.time.MicroTime\",\"version\":1,\"field\":\"_time_6\"},{\"type\":\"int64\",\"optional\":true,\"name\":\"io.debezium.time.MicroTimestamp\",\"version\":1,\"field\":\"_timestamp\"},{\"type\":\"int64\",\"optional\":true,\"name\":\"io.debezium.time.Timestamp\",\"version\":1,\"field\":\"_timestamp_3\"},{\"type\":\"string\",\"optional\":true,\"name\":\"io.debezium.time.ZonedTimestamp\",\"version\":1,\"field\":\"_timestamp_ltz\"},{\"type\":\"string\",\"optional\":true,\"name\":\"io.debezium.time.ZonedTimestamp\",\"version\":1,\"field\":\"_timestamp_ltz_3\"},{\"type\":\"string\",\"optional\":true,\"field\":\"pt\"}],\"optional\":true,\"field\":\"before\"},{\"type\":\"struct\",\"fields\":[{\"type\":\"boolean\",\"optional\":true,\"doc\":\"_boolean comment\",\"field\":\"_boolean\"},{\"type\":\"bytes\",\"optional\":true,\"name\":\"io.debezium.data.Bits\",\"version\":1,\"parameters\":{\"length\":\"3\"},\"field\":\"_binary\"},{\"type\":\"bytes\",\"optional\":true,\"name\":\"io.debezium.data.Bits\",\"version\":1,\"parameters\":{\"length\":\"10\"},\"field\":\"_varbinary\"},{\"type\":\"bytes\",\"optional\":true,\"name\":\"io.debezium.data.Bits\",\"version\":1,\"parameters\":{\"length\":\"2147483647\"},\"field\":\"_bytes\"},{\"type\":\"int16\",\"optional\":true,\"field\":\"_tinyint\"},{\"type\":\"int16\",\"optional\":true,\"field\":\"_smallint\"},{\"type\":\"int32\",\"optional\":true,\"field\":\"_int\"},{\"type\":\"int64\",\"optional\":true,\"field\":\"_bigint\"},{\"type\":\"float\",\"optional\":true,\"field\":\"_float\"},{\"type\":\"double\",\"optional\":true,\"field\":\"_double\"},{\"type\":\"bytes\",\"optional\":true,\"name\":\"org.apache.kafka.connect.data.Decimal\",\"version\":1,\"parameters\":{\"scale\":\"3\",\"connect.decimal.precision\":\"6\"},\"field\":\"_decimal\"},{\"type\":\"string\",\"optional\":true,\"field\":\"_char\"},{\"type\":\"string\",\"optional\":true,\"field\":\"_varchar\"},{\"type\":\"string\",\"optional\":true,\"field\":\"_string\"},{\"type\":\"int32\",\"optional\":true,\"name\":\"io.debezium.time.Date\",\"version\":1,\"field\":\"_date\"},{\"type\":\"int64\",\"optional\":true,\"name\":\"io.debezium.time.MicroTime\",\"version\":1,\"field\":\"_time\"},{\"type\":\"int64\",\"optional\":true,\"name\":\"io.debezium.time.MicroTime\",\"version\":1,\"field\":\"_time_6\"},{\"type\":\"int64\",\"optional\":true,\"name\":\"io.debezium.time.MicroTimestamp\",\"version\":1,\"field\":\"_timestamp\"},{\"type\":\"int64\",\"optional\":true,\"name\":\"io.debezium.time.Timestamp\",\"version\":1,\"field\":\"_timestamp_3\"},{\"type\":\"string\",\"optional\":true,\"name\":\"io.debezium.time.ZonedTimestamp\",\"version\":1,\"field\":\"_timestamp_ltz\"},{\"type\":\"string\",\"optional\":true,\"name\":\"io.debezium.time.ZonedTimestamp\",\"version\":1,\"field\":\"_timestamp_ltz_3\"},{\"type\":\"string\",\"optional\":true,\"field\":\"pt\"}],\"optional\":true,\"field\":\"after\"}],\"optional\":false},\"payload\":{\"before\":null,\"after\":{\"_boolean\":true,\"_binary\":\"AQI=\",\"_varbinary\":\"AwQ=\",\"_bytes\":\"BQYH\",\"_tinyint\":1,\"_smallint\":2,\"_int\":3,\"_bigint\":4,\"_float\":5.1,\"_double\":6.2,\"_decimal\":7.123,\"_char\":\"test1\",\"_varchar\":\"test2\",\"_string\":\"test3\",\"_date\":\"1970-04-11\",\"_time\":\"00:00:00\",\"_time_6\":\"00:00:00\",\"_timestamp\":\"2023-01-01 00:00:00\",\"_timestamp_3\":\"2023-01-01 00:00:00\",\"_timestamp_ltz\":\"2023-01-01 00:00:00Z\",\"_timestamp_ltz_3\":\"2023-01-01 00:00:00Z\",\"pt\":null},\"op\":\"c\",\"source\":{\"db\":\"default_schema\",\"table\":\"table1\"}}}");
         JsonNode actual = mapper.readTree(serializationSchema.serialize(insertEvent1));
         assertThat(actual).isEqualTo(expected);
+    }
+
+    @Test
+    public void testSerializeWithFormatOptions() throws Exception {
+        ObjectMapper mapper =
+                JacksonMapperFactory.createObjectMapper()
+                        .configure(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN, false);
+        Configuration formatOptions =
+                Configuration.fromMap(
+                        ImmutableMap.<String, String>builder()
+                                .put("timestamp-format.standard", "ISO-8601")
+                                .build());
+        TimestampFormat timestampFormat = JsonFormatOptionsUtil.getTimestampFormat(formatOptions);
+        JsonFormatOptions.MapNullKeyMode mapNullKeyMode =
+                JsonFormatOptionsUtil.getMapNullKeyMode(formatOptions);
+        String mapNullKeyLiteral = formatOptions.get(JSON_MAP_NULL_KEY_LITERAL);
+
+        Boolean encodeDecimalAsPlainNumber = formatOptions.get(ENCODE_DECIMAL_AS_PLAIN_NUMBER);
+        SerializationSchema<Event> serializationSchema =
+                new DebeziumJsonSerializationSchema(
+                        timestampFormat,
+                        mapNullKeyMode,
+                        mapNullKeyLiteral,
+                        ZoneId.systemDefault(),
+                        encodeDecimalAsPlainNumber);
+        serializationSchema.open(new MockInitializationContext());
+        // create table
+        Schema schema =
+                Schema.newBuilder()
+                        .physicalColumn("col1", DataTypes.STRING())
+                        .physicalColumn("col2", DataTypes.TIMESTAMP(6))
+                        .primaryKey("col1")
+                        .build();
+        CreateTableEvent createTableEvent = new CreateTableEvent(TABLE_1, schema);
+        Assertions.assertNull(serializationSchema.serialize(createTableEvent));
+        BinaryRecordDataGenerator generator =
+                new BinaryRecordDataGenerator(
+                        RowType.of(DataTypes.STRING(), DataTypes.TIMESTAMP(6)));
+        // insert
+        DataChangeEvent insertEvent1 =
+                DataChangeEvent.insertEvent(
+                        TABLE_1,
+                        generator.generate(
+                                new Object[] {
+                                    BinaryStringData.fromString("1"),
+                                    TimestampData.fromTimestamp(
+                                            Timestamp.valueOf("2025-01-02 18:00:22.123456"))
+                                }));
+        JsonNode expected =
+                mapper.readTree(
+                        "{\"before\":null,\"after\":{\"col1\":\"1\",\"col2\":\"2025-01-02T18:00:22.123456\"},\"op\":\"c\",\"source\":{\"db\":\"default_schema\",\"table\":\"table1\"}}");
+        JsonNode actual = mapper.readTree(serializationSchema.serialize(insertEvent1));
+        Assertions.assertEquals(expected, actual);
+        DataChangeEvent insertEvent2 =
+                DataChangeEvent.insertEvent(
+                        TABLE_1,
+                        generator.generate(
+                                new Object[] {
+                                    BinaryStringData.fromString("2"),
+                                    TimestampData.fromTimestamp(
+                                            Timestamp.valueOf("2025-01-02 18:00:22.123456"))
+                                }));
+        expected =
+                mapper.readTree(
+                        "{\"before\":null,\"after\":{\"col1\":\"2\",\"col2\":\"2025-01-02T18:00:22.123456\"},\"op\":\"c\",\"source\":{\"db\":\"default_schema\",\"table\":\"table1\"}}");
+        actual = mapper.readTree(serializationSchema.serialize(insertEvent2));
+        Assertions.assertEquals(expected, actual);
+        DataChangeEvent deleteEvent =
+                DataChangeEvent.deleteEvent(
+                        TABLE_1,
+                        generator.generate(
+                                new Object[] {
+                                    BinaryStringData.fromString("2"),
+                                    TimestampData.fromTimestamp(
+                                            Timestamp.valueOf("2025-01-02 18:00:22.123456"))
+                                }));
+        expected =
+                mapper.readTree(
+                        "{\"before\":{\"col1\":\"2\",\"col2\":\"2025-01-02T18:00:22.123456\"},\"after\":null,\"op\":\"d\",\"source\":{\"db\":\"default_schema\",\"table\":\"table1\"}}");
+        actual = mapper.readTree(serializationSchema.serialize(deleteEvent));
+        Assertions.assertEquals(expected, actual);
+        DataChangeEvent updateEvent =
+                DataChangeEvent.updateEvent(
+                        TABLE_1,
+                        generator.generate(
+                                new Object[] {
+                                    BinaryStringData.fromString("1"),
+                                    TimestampData.fromTimestamp(
+                                            Timestamp.valueOf("2025-01-02 18:00:22.123456"))
+                                }),
+                        generator.generate(
+                                new Object[] {
+                                    BinaryStringData.fromString("1"),
+                                    TimestampData.fromTimestamp(
+                                            Timestamp.valueOf("2025-01-02 20:00:22.123456"))
+                                }));
+        expected =
+                mapper.readTree(
+                        "{\"before\":{\"col1\":\"1\",\"col2\":\"2025-01-02T18:00:22.123456\"},\"after\":{\"col1\":\"1\",\"col2\":\"2025-01-02T20:00:22.123456\"},\"op\":\"u\",\"source\":{\"db\":\"default_schema\",\"table\":\"table1\"}}");
+        actual = mapper.readTree(serializationSchema.serialize(updateEvent));
+        Assertions.assertEquals(expected, actual);
     }
 }

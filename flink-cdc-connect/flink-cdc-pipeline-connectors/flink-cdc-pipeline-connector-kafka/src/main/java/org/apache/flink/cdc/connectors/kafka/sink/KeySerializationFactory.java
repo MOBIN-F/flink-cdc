@@ -21,7 +21,6 @@ import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.cdc.common.event.Event;
 import org.apache.flink.cdc.connectors.kafka.serialization.CsvSerializationSchema;
 import org.apache.flink.cdc.connectors.kafka.serialization.JsonSerializationSchema;
-import org.apache.flink.cdc.connectors.kafka.utils.JsonRowDataSerializationSchemaUtils;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.formats.common.TimestampFormat;
 import org.apache.flink.formats.json.JsonFormatOptions;
@@ -55,16 +54,12 @@ public class KeySerializationFactory {
 
                     final boolean encodeDecimalAsPlainNumber =
                             formatOptions.get(ENCODE_DECIMAL_AS_PLAIN_NUMBER);
-                    final boolean ignoreNullFields =
-                            JsonRowDataSerializationSchemaUtils.enableIgnoreNullFields(
-                                    formatOptions);
                     return new JsonSerializationSchema(
                             timestampFormat,
                             mapNullKeyMode,
                             mapNullKeyLiteral,
                             zoneId,
-                            encodeDecimalAsPlainNumber,
-                            ignoreNullFields);
+                            encodeDecimalAsPlainNumber);
                 }
             case CSV:
                 {

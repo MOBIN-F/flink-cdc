@@ -21,11 +21,10 @@ import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.cdc.common.configuration.ConfigOption;
 import org.apache.flink.cdc.common.event.Event;
 import org.apache.flink.cdc.common.factories.DataSinkFactory;
-import org.apache.flink.cdc.common.factories.FactoryHelper;
 import org.apache.flink.cdc.common.pipeline.PipelineOptions;
 import org.apache.flink.cdc.common.sink.DataSink;
-import org.apache.flink.cdc.connectors.kafka.json.ChangeLogJsonFormatFactory;
-import org.apache.flink.cdc.connectors.kafka.json.JsonSerializationType;
+import org.apache.flink.cdc.connectors.kafka.format.FormatFactory;
+import org.apache.flink.cdc.connectors.kafka.format.FormatFactoryHelper;
 import org.apache.flink.connector.base.DeliveryGuarantee;
 
 import java.time.ZoneId;
@@ -52,13 +51,16 @@ public class KafkaDataSinkFactory implements DataSinkFactory {
 
     @Override
     public DataSink createDataSink(Context context) {
-        KeyFormat keyFormat = context.getFactoryConfiguration().get(KEY_FORMAT);
-        JsonSerializationType jsonSerializationType =
-                context.getFactoryConfiguration().get(KafkaDataSinkOptions.VALUE_FORMAT);
+        FormatFactoryHelper formatFactoryHelper =
+                FormatFactoryHelper.createFormatFactoryHelper(this, context);
 
-        FactoryHelper helper = FactoryHelper.createFactoryHelper(this, context);
-        helper.validateExcept(
-                PROPERTIES_PREFIX, keyFormat.toString(), jsonSerializationType.toString());
+        SerializationSchema<Event> valueSerialization =
+                formatFactoryHelper.discoverEncodingFormat(FormatFactory.class, VALUE_FORMAT);
+
+        SerializationSchema<Event> keySerialization =
+                formatFactoryHelper.discoverEncodingFormat(FormatFactory.class, KEY_FORMAT);
+
+        formatFactoryHelper.validateExcept(PROPERTIES_PREFIX);
 
         DeliveryGuarantee deliveryGuarantee =
                 context.getFactoryConfiguration().get(KafkaDataSinkOptions.DELIVERY_GUARANTEE);
@@ -71,14 +73,7 @@ public class KafkaDataSinkFactory implements DataSinkFactory {
                             context.getPipelineConfiguration()
                                     .get(PipelineOptions.PIPELINE_LOCAL_TIME_ZONE));
         }
-        SerializationSchema<Event> keySerialization =
-                KeySerializationFactory.createSerializationSchema(
-                        helper.getFormatConfig(keyFormat.toString()), keyFormat, zoneId);
-        SerializationSchema<Event> valueSerialization =
-                ChangeLogJsonFormatFactory.createSerializationSchema(
-                        helper.getFormatConfig(jsonSerializationType.toString()),
-                        jsonSerializationType,
-                        zoneId);
+
         final Properties kafkaProperties = new Properties();
         Map<String, String> allOptions = context.getFactoryConfiguration().toMap();
         allOptions.keySet().stream()
