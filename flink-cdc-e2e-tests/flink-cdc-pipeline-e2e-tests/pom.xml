@@ -220,10 +220,6 @@ limitations under the License.
                     <artifactId>slf4j-log4j12</artifactId>
                     <groupId>org.slf4j</groupId>
                 </exclusion>
-                <exclusion>
-                    <groupId>com.google.code.gson</groupId>
-                    <artifactId>gson</artifactId>
-                </exclusion>
             </exclusions>
         </dependency>
 
@@ -232,16 +228,6 @@ limitations under the License.
             <artifactId>flink-yarn</artifactId>
             <version>${flink.version}</version>
             <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.squareup.okhttp</groupId>
-                    <artifactId>okhttp</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.google.code.gson</groupId>
-                    <artifactId>gson</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
     </dependencies>
 
