@@ -330,4 +330,15 @@ public class MySqlDataSourceOptions {
                     .defaultValue(false)
                     .withDescription(
                             "Whether to skip backfill in snapshot reading phase. If backfill is skipped, changes on captured tables during snapshot phase will be consumed later in change log reading phase instead of being merged into the snapshot.WARNING: Skipping backfill might lead to data inconsistency because some change log events happened within the snapshot phase might be replayed (only at-least-once semantic is promised). For example updating an already updated value in snapshot, or deleting an already deleted entry in snapshot. These replayed change log events should be handled specially.");
+
+    @Experimental
+    public static final ConfigOption<String> SCAN_SNAPSHOT_FILTERS =
+            ConfigOptions.key("scan.snapshot.filters")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "The filter of table snapshot, captured tables' rows will be filtered by the filter expression (AKA a SQL where clause) when reading the snapshot of table."
+                                    + "By default, no filter is applied, which means the entire table will be synchronized."
+                                    + "Use a colon (:) to separate table name and filter expression, use a semicolon (;) to separate multiple filters."
+                                    + "eg. db1.user_table_[0-9]+:id > 100;db[1-2].[app|web]_order_\\.*:id < 0;");
 }

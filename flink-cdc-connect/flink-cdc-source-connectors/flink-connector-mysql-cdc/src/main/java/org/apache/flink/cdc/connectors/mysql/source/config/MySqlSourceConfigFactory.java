@@ -74,6 +74,7 @@ public class MySqlSourceConfigFactory implements Serializable {
     private boolean treatTinyInt1AsBoolean = true;
     private boolean useLegacyJsonFormat = true;
     private boolean assignUnboundedChunkFirst = false;
+    private Map<String, String> snapshotFilters = new HashMap<>();
 
     public MySqlSourceConfigFactory hostname(String hostname) {
         this.hostname = hostname;
@@ -315,6 +316,11 @@ public class MySqlSourceConfigFactory implements Serializable {
         return this;
     }
 
+    public MySqlSourceConfigFactory snapshotFilters(Map<String, String> snapshotFilters) {
+        this.snapshotFilters = snapshotFilters;
+        return this;
+    }
+
     /**
      * Whether to assign the unbounded chunks first during snapshot reading phase. Defaults to
      * false.
@@ -421,6 +427,7 @@ public class MySqlSourceConfigFactory implements Serializable {
                 parseOnLineSchemaChanges,
                 treatTinyInt1AsBoolean,
                 useLegacyJsonFormat,
-                assignUnboundedChunkFirst);
+                assignUnboundedChunkFirst,
+                snapshotFilters);
     }
 }
