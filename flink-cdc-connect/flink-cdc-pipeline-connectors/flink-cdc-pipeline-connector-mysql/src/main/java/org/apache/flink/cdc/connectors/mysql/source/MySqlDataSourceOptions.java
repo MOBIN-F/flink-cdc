@@ -313,4 +313,15 @@ public class MySqlDataSourceOptions {
                     .defaultValue(true)
                     .withDescription(
                             "Whether to use legacy json format. The default value is true, which means there is no whitespace before value and after comma in json format.");
+
+    @Experimental
+    public static final ConfigOption<String> SCAN_SNAPSHOT_FILTERS =
+            ConfigOptions.key("scan.snapshot.filters")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "The filter of table snapshot, captured tables' rows will be filtered by the filter expression (AKA a SQL where clause) when reading the snapshot of table."
+                                    + "By default, no filter is applied, which means the entire table will be synchronized."
+                                    + "Use a colon (:) to separate table name and filter expression, use a semicolon (;) to separate multiple filters."
+                                    + "eg. db1.user_table_[0-9]+:id > 100;db[1-2].[app|web]_order_\\.*:id < 0;");
 }
