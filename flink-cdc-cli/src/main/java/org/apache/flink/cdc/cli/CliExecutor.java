@@ -76,7 +76,9 @@ public class CliExecutor {
     public PipelineExecution.ExecutionInfo run() throws Exception {
         // Create Submit Executor to deployment flink cdc job Or Run Flink CDC Job
         String deploymentTargetStr = ConfigurationUtils.getDeploymentMode(commandLine);
+        System.out.println(deploymentTargetStr + "----");
         ComposeDeployment deploymentTarget = ComposeDeployment.getFromName(deploymentTargetStr);
+        System.out.println(deploymentTarget);
         switch (deploymentTarget) {
             case KUBERNETES_APPLICATION:
                 return deployWithApplicationComposer(new K8SApplicationDeploymentExecutor());

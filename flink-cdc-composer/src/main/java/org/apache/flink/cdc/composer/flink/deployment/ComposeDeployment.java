@@ -33,6 +33,10 @@ public enum ComposeDeployment {
         this.name = checkNotNull(name);
     }
 
+    public String getName() {
+        return name;
+    }
+
     public static ComposeDeployment getFromName(final String deploymentTarget) {
         if (deploymentTarget == null) {
             return null;

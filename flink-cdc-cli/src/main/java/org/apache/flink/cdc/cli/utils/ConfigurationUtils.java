@@ -75,7 +75,7 @@ public class ConfigurationUtils {
         if (commandLine.hasOption(CliFrontendOptions.USE_MINI_CLUSTER)) {
             return ComposeDeployment.LOCAL.name();
         }
-        return commandLine.getOptionValue(TARGET, ComposeDeployment.YARN_SESSION.name());
+        return commandLine.getOptionValue(TARGET, ComposeDeployment.YARN_SESSION.getName());
     }
 
     public static Class<?> getClaimModeClass() {
