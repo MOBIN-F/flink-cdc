@@ -202,6 +202,10 @@ limitations under the License.
                     <groupId>org.slf4j</groupId>
                     <artifactId>slf4j-reload4j</artifactId>
                 </exclusion>
+                <exclusion>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+            </exclusion>
             </exclusions>
         </dependency>
 
@@ -244,6 +248,10 @@ limitations under the License.
                     <artifactId>slf4j-log4j12</artifactId>
                     <groupId>org.slf4j</groupId>
                 </exclusion>
+                <exclusion>
+                    <groupId>com.google.protobuf</groupId>
+                    <artifactId>protobuf-java</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
@@ -265,6 +273,10 @@ limitations under the License.
                 <exclusion>
                     <artifactId>slf4j-log4j12</artifactId>
                     <groupId>org.slf4j</groupId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.protobuf</groupId>
+                    <artifactId>protobuf-java</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -305,6 +317,10 @@ limitations under the License.
 <!--                    <groupId>com.google.code.gson</groupId>-->
 <!--                    <artifactId>gson</artifactId>-->
 <!--                </exclusion>-->
+                <exclusion>
+                    <groupId>com.google.protobuf</groupId>
+                    <artifactId>protobuf-java</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
     </dependencies>
