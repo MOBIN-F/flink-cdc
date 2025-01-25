@@ -35,7 +35,7 @@ limitations under the License.
         <mysql.driver.version>8.0.27</mysql.driver.version>
         <starrocks.connector.version>1.2.10_flink-${flink.major.version}</starrocks.connector.version>
         <paimon.version>0.9.0</paimon.version>
-        <flink.hadoop.version>2.7.2</flink.hadoop.version>
+        <flink.hadoop.version>2.8.5</flink.hadoop.version>
         <flink.release.download.skip>false</flink.release.download.skip>
         <flink.release.name>flink-${flink.version}-bin-scala_${scala.binary.version}.tgz</flink.release.name>
         <flink.release.mirror>https://dlcdn.apache.org/flink/flink-${flink.version}</flink.release.mirror>
