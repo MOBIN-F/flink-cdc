@@ -75,7 +75,7 @@ public class ConfigurationUtils {
         if (commandLine.hasOption(CliFrontendOptions.USE_MINI_CLUSTER)) {
             return LocalExecutor.NAME;
         }
-        return commandLine.getOptionValue(TARGET, LocalExecutor.NAME);
+        return commandLine.getOptionValue(TARGET, "yarn-session");
     }
 
     public static Class<?> getClaimModeClass() {
