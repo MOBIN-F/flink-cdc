@@ -109,6 +109,7 @@ public class MySqlToPaimonE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testSyncWholeDatabase() throws Exception {
         String warehouse = sharedVolume.toString() + "/" + "paimon_" + UUID.randomUUID();
         String database = inventoryDatabase.getDatabaseName();

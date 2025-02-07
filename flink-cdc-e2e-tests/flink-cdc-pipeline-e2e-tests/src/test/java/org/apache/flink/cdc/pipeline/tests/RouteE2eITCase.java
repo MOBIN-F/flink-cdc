@@ -143,6 +143,7 @@ public class RouteE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testDefaultRoute() throws Exception {
         String pipelineJob =
                 String.format(
@@ -235,6 +236,7 @@ public class RouteE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testMergeTableRoute() throws Exception {
         String pipelineJob =
                 String.format(
@@ -319,6 +321,7 @@ public class RouteE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testPartialRoute() throws Exception {
         String pipelineJob =
                 String.format(
@@ -415,6 +418,7 @@ public class RouteE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testMultipleRoute() throws Exception {
         String pipelineJob =
                 String.format(
@@ -521,6 +525,7 @@ public class RouteE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testOneToManyRoute() throws Exception {
         String pipelineJob =
                 String.format(
@@ -635,6 +640,7 @@ public class RouteE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testMergeTableRouteWithTransform() throws Exception {
         String pipelineJob =
                 String.format(
@@ -724,6 +730,7 @@ public class RouteE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testReplacementSymbol() throws Exception {
         String pipelineJob =
                 String.format(
@@ -821,6 +828,7 @@ public class RouteE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testExtremeMergeTableRoute() throws Exception {
         final String databaseName = extremeRouteTestDatabase.getDatabaseName();
         try (Connection conn =

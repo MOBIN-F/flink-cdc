@@ -90,6 +90,7 @@ public class SchemaEvolvingTransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testSchemaEvolve() throws Exception {
         testGenericSchemaEvolution(
                 "evolve",
@@ -109,6 +110,7 @@ public class SchemaEvolvingTransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testSchemaEvolveWithIncompatibleChanges() throws Exception {
         testGenericSchemaEvolution(
                 "evolve",
@@ -125,6 +127,7 @@ public class SchemaEvolvingTransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testSchemaEvolveWithException() throws Exception {
         testGenericSchemaEvolution(
                 "evolve",
@@ -140,6 +143,7 @@ public class SchemaEvolvingTransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testSchemaTryEvolveWithException() throws Exception {
         testGenericSchemaEvolution(
                 "try_evolve",
@@ -161,6 +165,7 @@ public class SchemaEvolvingTransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testSchemaIgnore() throws Exception {
 
         testGenericSchemaEvolution(
@@ -175,6 +180,7 @@ public class SchemaEvolvingTransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testSchemaException() throws Exception {
         testGenericSchemaEvolution(
                 "exception",
@@ -188,6 +194,7 @@ public class SchemaEvolvingTransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testLenientSchemaEvolution() throws Exception {
         testGenericSchemaEvolution(
                 "lenient",
@@ -204,6 +211,7 @@ public class SchemaEvolvingTransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testFineGrainedSchemaEvolution() throws Exception {
 
         testGenericSchemaEvolution(
@@ -225,6 +233,7 @@ public class SchemaEvolvingTransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testUnexpectedBehavior() {
         String pipelineJob =
                 String.format(

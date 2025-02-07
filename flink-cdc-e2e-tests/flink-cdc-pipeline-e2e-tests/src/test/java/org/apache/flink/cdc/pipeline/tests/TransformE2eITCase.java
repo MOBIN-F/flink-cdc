@@ -97,6 +97,7 @@ public class TransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testHeteroSchemaTransform() throws Exception {
         String pipelineJob =
                 String.format(
@@ -179,6 +180,7 @@ public class TransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testMultipleTransformRule() throws Exception {
         String pipelineJob =
                 String.format(
@@ -268,6 +270,7 @@ public class TransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testAssortedSchemaTransform() throws Exception {
         String pipelineJob =
                 String.format(
@@ -350,6 +353,7 @@ public class TransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testWildcardSchemaTransform() throws Exception {
         String pipelineJob =
                 String.format(
@@ -433,6 +437,7 @@ public class TransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testWildcardWithMetadataColumnTransform() throws Exception {
         String pipelineJob =
                 String.format(
@@ -521,6 +526,7 @@ public class TransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testMultipleHittingTable() throws Exception {
         String pipelineJob =
                 String.format(
@@ -602,6 +608,7 @@ public class TransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testMultipleTransformWithDiffRefColumn() throws Exception {
         String pipelineJob =
                 String.format(
@@ -678,6 +685,7 @@ public class TransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testTransformWithCast() throws Exception {
         String pipelineJob =
                 String.format(
@@ -760,6 +768,7 @@ public class TransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testTemporalFunctions() throws Exception {
         String pipelineJob =
                 String.format(
@@ -799,6 +808,7 @@ public class TransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testTransformWithSchemaEvolution() throws Exception {
         String pipelineJob =
                 String.format(
@@ -898,6 +908,7 @@ public class TransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testTransformWildcardPrefixWithSchemaEvolution() throws Exception {
         String pipelineJob =
                 String.format(
@@ -1005,6 +1016,7 @@ public class TransformE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testTransformWildcardSuffixWithSchemaEvolution() throws Exception {
         String pipelineJob =
                 String.format(

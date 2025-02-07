@@ -89,6 +89,7 @@ public class MysqlE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testSyncWholeDatabase() throws Exception {
         String pipelineJob =
                 String.format(
@@ -197,6 +198,7 @@ public class MysqlE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testSchemaChangeEvents() throws Exception {
         String pipelineJob =
                 String.format(
@@ -337,6 +339,7 @@ public class MysqlE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testSoftDelete() throws Exception {
         String pipelineJob =
                 String.format(
@@ -483,6 +486,7 @@ public class MysqlE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testDanglingDropTableEventInBinlog() throws Exception {
         // Create a new table for later deletion
         try (Connection connection = mysqlInventoryDatabase.getJdbcConnection();

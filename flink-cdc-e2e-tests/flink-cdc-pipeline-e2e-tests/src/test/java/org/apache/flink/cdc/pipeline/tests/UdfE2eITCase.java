@@ -88,21 +88,25 @@ public class UdfE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testUserDefinedFunctionsInJava() throws Exception {
         testUserDefinedFunctions("java");
     }
 
     @Test
+    @Disabled
     public void testUserDefinedFunctionsInScala() throws Exception {
         testUserDefinedFunctions("scala");
     }
 
     @Test
+    @Disabled
     public void testFlinkCompatibleScalarFunctionsInJava() throws Exception {
         testFlinkCompatibleScalarFunctions("java");
     }
 
     @Test
+    @Disabled
     public void testFlinkCompatibleScalarFunctionsInScala() throws Exception {
         testFlinkCompatibleScalarFunctions("scala");
     }

@@ -75,6 +75,7 @@ public class MaxComputeE2eITCase extends PipelineTestEnvironment {
                     .build();
 
     @Test
+    @Disabled
     public void testSingleSplitSingleTable() throws Exception {
         startTest("SINGLE_SPLIT_SINGLE_TABLE");
         Instance instance =

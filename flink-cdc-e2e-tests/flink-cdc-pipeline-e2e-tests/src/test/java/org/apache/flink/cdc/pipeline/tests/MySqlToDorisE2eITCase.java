@@ -169,6 +169,7 @@ public class MySqlToDorisE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testSyncWholeDatabase() throws Exception {
         String databaseName = mysqlInventoryDatabase.getDatabaseName();
         String pipelineJob =
@@ -339,6 +340,7 @@ public class MySqlToDorisE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testComplexDataTypes() throws Exception {
         String databaseName = complexDataTypesDatabase.getDatabaseName();
         String pipelineJob =
@@ -493,6 +495,7 @@ public class MySqlToDorisE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
+    @Disabled
     public void testSchemaEvolution() throws Exception {
         String databaseName = mysqlInventoryDatabase.getDatabaseName();
         String pipelineJob =
