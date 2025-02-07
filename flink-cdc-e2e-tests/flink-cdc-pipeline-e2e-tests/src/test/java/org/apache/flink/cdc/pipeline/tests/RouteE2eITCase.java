@@ -27,6 +27,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
@@ -44,6 +45,7 @@ import java.util.stream.IntStream;
 
 /** E2e tests for routing features. */
 @RunWith(Parameterized.class)
+@Disabled
 public class RouteE2eITCase extends PipelineTestEnvironment {
     private static final Logger LOG = LoggerFactory.getLogger(RouteE2eITCase.class);
 

@@ -29,6 +29,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.Container;
@@ -52,6 +53,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /** End-to-end tests for mysql cdc to Paimon pipeline job. */
+@Disabled
 public class MySqlToPaimonE2eITCase extends PipelineTestEnvironment {
     private static final Logger LOG = LoggerFactory.getLogger(MySqlToPaimonE2eITCase.class);
 

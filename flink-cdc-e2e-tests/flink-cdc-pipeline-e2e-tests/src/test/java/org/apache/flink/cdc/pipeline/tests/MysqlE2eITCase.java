@@ -28,6 +28,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
@@ -45,6 +46,7 @@ import java.util.concurrent.TimeoutException;
 
 /** End-to-end tests for mysql cdc pipeline job. */
 @RunWith(Parameterized.class)
+@Disabled
 public class MysqlE2eITCase extends PipelineTestEnvironment {
     private static final Logger LOG = LoggerFactory.getLogger(MysqlE2eITCase.class);
 

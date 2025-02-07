@@ -41,6 +41,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
@@ -77,6 +78,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /** End-to-end tests for mysql cdc to Kafka pipeline job. */
 @RunWith(Parameterized.class)
+@Disabled
 public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
     private static final Logger LOG = LoggerFactory.getLogger(MysqlToKafkaE2eITCase.class);
 

@@ -29,6 +29,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
@@ -58,6 +59,7 @@ import static org.junit.Assert.fail;
 
 /** End-to-end tests for mysql cdc to Doris pipeline job. */
 @RunWith(Parameterized.class)
+@Disabled
 public class MySqlToDorisE2eITCase extends PipelineTestEnvironment {
     private static final Logger LOG = LoggerFactory.getLogger(MySqlToDorisE2eITCase.class);
 

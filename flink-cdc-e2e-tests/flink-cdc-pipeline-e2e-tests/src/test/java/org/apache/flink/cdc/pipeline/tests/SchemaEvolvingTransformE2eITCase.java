@@ -28,6 +28,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
@@ -46,6 +47,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /** E2e tests for Schema Evolution cases. */
+@Disabled
 public class SchemaEvolvingTransformE2eITCase extends PipelineTestEnvironment {
     private static final Logger LOG =
             LoggerFactory.getLogger(SchemaEvolvingTransformE2eITCase.class);

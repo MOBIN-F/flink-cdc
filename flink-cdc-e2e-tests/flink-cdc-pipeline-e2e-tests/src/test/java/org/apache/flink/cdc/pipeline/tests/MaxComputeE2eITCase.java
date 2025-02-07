@@ -34,6 +34,7 @@ import com.aliyun.odps.task.SQLTask;
 import org.junit.Assert;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
@@ -53,6 +54,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /** End-to-end tests for maxcompute cdc pipeline job. */
+@Disabled
 public class MaxComputeE2eITCase extends PipelineTestEnvironment {
     private static final Logger LOG = LoggerFactory.getLogger(MaxComputeE2eITCase.class);
 

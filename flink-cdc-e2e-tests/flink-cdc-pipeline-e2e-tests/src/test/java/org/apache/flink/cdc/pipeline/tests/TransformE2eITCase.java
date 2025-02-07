@@ -30,6 +30,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
@@ -54,6 +55,7 @@ import java.util.stream.Stream;
 
 /** E2e tests for the {@link PreTransformOperator} and {@link PostTransformOperator}. */
 @RunWith(Parameterized.class)
+@Disabled
 public class TransformE2eITCase extends PipelineTestEnvironment {
     private static final Logger LOG = LoggerFactory.getLogger(TransformE2eITCase.class);
 

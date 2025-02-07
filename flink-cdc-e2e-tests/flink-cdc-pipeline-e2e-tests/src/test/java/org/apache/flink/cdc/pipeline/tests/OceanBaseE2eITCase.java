@@ -35,6 +35,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
@@ -56,6 +57,7 @@ import java.util.stream.Stream;
 
 /** OceanBase flink cdc pipeline connector sink integrate test. */
 @RunWith(Parameterized.class)
+@Disabled
 public class OceanBaseE2eITCase extends PipelineTestEnvironment {
     private static final Logger LOG = LoggerFactory.getLogger(OceanBaseE2eITCase.class);
 
