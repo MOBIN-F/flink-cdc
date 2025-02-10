@@ -58,6 +58,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -214,9 +215,24 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
             commandList.add(jar.toString());
         }
 
+        System.out.println(commandList.stream().collect(Collectors.joining(" ")));
+
+        //        Thread.sleep(5000000);
+
         processBuilder.command(commandList);
         LOG.info("starting flink-cdc task with flink on yarn-application");
         Process process = processBuilder.start();
+        //        String stdout = IOUtils.toString(process.getInputStream(),
+        // StandardCharsets.UTF_8);
+        //        String stderr = IOUtils.toString(process.getErrorStream(),
+        // StandardCharsets.UTF_8);
+        //        LOG.info("Command stdout: {}", stdout);
+        //        LOG.error("Command stderr: {}", stderr);
+
+        //        int exitCode = process.waitFor();
+        //        if (exitCode != 0) {
+        //            throw new RuntimeException("Command failed with exit code " + exitCode);
+        //        }
         process.waitFor();
         String applicationIdStr = getApplicationId(process);
         Preconditions.checkNotNull(
@@ -235,7 +251,7 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         Map<String, String> env = new HashMap<>();
         env.put("FLINK_HOME", flinkHome.toString());
         env.put("FLINK_CONF_DIR", flinkHome.resolve("conf").toString());
-        addFlinkConf(flinkHome.resolve("conf").resolve("flink-conf.yaml"));
+        addFlinkConf(flinkHome.resolve("conf").resolve("config.yaml"));
         Path flinkcdcHome =
                 TestUtils.getResource("flink-cdc-\\d+(\\.\\d+)*(-SNAPSHOT)?$", "flink-cdc-dist");
         env.put("FLINK_CDC_HOME", flinkcdcHome.toString());
@@ -270,8 +286,11 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
 
     public String getApplicationId(Process process) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        System.out.println(reader);
+        System.out.println(reader.readLine());
         String line;
         while ((line = reader.readLine()) != null) {
+            System.out.println(line);
             if (line.startsWith("Job ID")) {
                 LOG.info(line);
                 return line.split(":")[1].trim();
