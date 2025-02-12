@@ -17,6 +17,7 @@
 
 package org.apache.flink.cdc.cli;
 
+import org.apache.flink.cdc.cli.parser.YamlPipelineDefinitionParser;
 import org.apache.flink.cdc.cli.utils.ConfigurationUtils;
 import org.apache.flink.cdc.cli.utils.FlinkEnvironmentUtils;
 import org.apache.flink.cdc.common.annotation.VisibleForTesting;
@@ -41,6 +42,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.stream.Collectors;
@@ -91,13 +93,15 @@ public class CliFrontend {
         LOG.info("Real Path pipelineDefPath {}", pipelineDefPath);
         // Global pipeline configuration
         Configuration globalPipelineConfig = getGlobalConfig(commandLine);
+        Map<String, String> flinkConfigFromPipelineDef =
+                YamlPipelineDefinitionParser.getFlinkConfigFromPipelineDef(pipelineDefPath);
 
         // Load Flink environment
         Path flinkHome = getFlinkHome(commandLine);
         Configuration flinkConfig = FlinkEnvironmentUtils.loadFlinkConfiguration(flinkHome);
 
-        // To override the Flink configuration
-        overrideFlinkConfiguration(flinkConfig, commandLine);
+        // To override the Flink configuration from flink config.yaml and pipeline.yaml
+        overrideFlinkConfiguration(flinkConfig, flinkConfigFromPipelineDef, commandLine);
 
         // Savepoint
         SavepointRestoreSettings savepointSettings = createSavepointRestoreSettings(commandLine);
@@ -123,22 +127,38 @@ public class CliFrontend {
     }
 
     private static void overrideFlinkConfiguration(
-            Configuration flinkConfig, CommandLine commandLine) {
-        Properties properties = commandLine.getOptionProperties(FLINK_CONFIG.getOpt());
-        LOG.info("Dynamic flink config items found: {}", properties);
-        for (String key : properties.stringPropertyNames()) {
-            String value = properties.getProperty(key);
-            if (StringUtils.isNullOrWhitespaceOnly(key)
-                    || StringUtils.isNullOrWhitespaceOnly(value)) {
-                throw new IllegalArgumentException(
-                        String.format(
-                                "null or white space argument for key or value: %s=%s",
-                                key, value));
-            }
-            ConfigOption<String> configOption =
-                    ConfigOptions.key(key.trim()).stringType().defaultValue(value.trim());
-            flinkConfig.set(configOption, value.trim());
+            Configuration flinkConfig,
+            Map<String, String> flinkConfigFromPipelineDef,
+            CommandLine commandLine) {
+        Properties commandLineProperties = commandLine.getOptionProperties(FLINK_CONFIG.getOpt());
+        LOG.info("Dynamic flink config items found from command-line: {}", commandLineProperties);
+        commandLineProperties
+                .stringPropertyNames()
+                .forEach(
+                        key ->
+                                processFlinkConfigEntry(
+                                        flinkConfig, key, commandLineProperties.getProperty(key)));
+
+        LOG.info(
+                "Dynamic flink config items found from flink pipeline.yaml: {}",
+                flinkConfigFromPipelineDef);
+        flinkConfigFromPipelineDef.forEach(
+                (key, value) -> processFlinkConfigEntry(flinkConfig, key, value));
+    }
+
+    private static void processFlinkConfigEntry(
+            Configuration flinkConfig, String key, String value) {
+        if (StringUtils.isNullOrWhitespaceOnly(key) || StringUtils.isNullOrWhitespaceOnly(value)) {
+            throw new IllegalArgumentException(
+                    String.format(
+                            "null or white space argument for key or value: %s=%s", key, value));
         }
+        String trimmedKey = key.trim();
+        String trimmedValue = value.trim();
+        ConfigOption<String> configOption =
+                ConfigOptions.key(trimmedKey).stringType().defaultValue(trimmedValue);
+        flinkConfig.set(configOption, trimmedValue);
+        LOG.info("Dynamic flink config items found {}={}", trimmedKey, trimmedValue);
     }
 
     private static SavepointRestoreSettings createSavepointRestoreSettings(

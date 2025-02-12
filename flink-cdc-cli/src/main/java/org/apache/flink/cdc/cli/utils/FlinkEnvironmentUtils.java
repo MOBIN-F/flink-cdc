@@ -50,11 +50,11 @@ public class FlinkEnvironmentUtils {
             Configuration flinkConfig,
             List<Path> additionalJars,
             SavepointRestoreSettings savepointSettings) {
-        if (useMiniCluster) {
-            return FlinkPipelineComposer.ofMiniCluster();
-        }
         org.apache.flink.configuration.Configuration configuration =
                 org.apache.flink.configuration.Configuration.fromMap(flinkConfig.toMap());
+        if (useMiniCluster) {
+            return FlinkPipelineComposer.ofMiniCluster(configuration);
+        }
         SavepointRestoreSettings.toConfiguration(savepointSettings, configuration);
         return FlinkPipelineComposer.ofRemoteCluster(configuration, additionalJars);
     }
