@@ -115,7 +115,7 @@ public class MySqlParallelizedPipelineITCase extends MySqlSourceTestBase {
         }
         LOG.info("Table initialized successfully.");
 
-        FlinkPipelineComposer composer = FlinkPipelineComposer.ofMiniCluster();
+        FlinkPipelineComposer composer = FlinkPipelineComposer.ofMiniCluster(new org.apache.flink.configuration.Configuration());
 
         // Setup MySQL source
         Configuration sourceConfig = new Configuration();
