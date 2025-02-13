@@ -40,8 +40,10 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMap
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -62,6 +64,7 @@ public class YamlPipelineDefinitionParser implements PipelineDefinitionParser {
     private static final String TRANSFORM_KEY = "transform";
     private static final String PIPELINE_KEY = "pipeline";
     private static final String MODEL_KEY = "model";
+    private static final String FLINK_KEY = "flink";
 
     // Source / sink keys
     private static final String TYPE_KEY = "type";
@@ -131,6 +134,8 @@ public class YamlPipelineDefinitionParser implements PipelineDefinitionParser {
             Optional.ofNullable(
                             ((ObjectNode) pipelineDefJsonNode.get(PIPELINE_KEY)).remove(MODEL_KEY))
                     .ifPresent(node -> modelDefs.addAll(parseModels(node)));
+
+            ((ObjectNode) pipelineDefJsonNode.get(PIPELINE_KEY)).remove(FLINK_KEY);
         }
 
         // Pipeline configs are optional
@@ -376,5 +381,23 @@ public class YamlPipelineDefinitionParser implements PipelineDefinitionParser {
                         .asText();
         Map<String, String> properties = mapper.convertValue(modelNode, Map.class);
         return new ModelDef(name, model, properties);
+    }
+
+    public static Map<String, String> getFlinkConfigFromPipelineDef(Path pipelineDefPath)
+            throws IOException {
+        ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+        FileSystem fileSystem = FileSystem.get(pipelineDefPath.toUri());
+        FSDataInputStream inStream = fileSystem.open(pipelineDefPath);
+        JsonNode pipelineDefJsonNode = mapper.readTree(inStream);
+        if (pipelineDefJsonNode.get(PIPELINE_KEY) != null) {
+            JsonNode flinkConfigNode = pipelineDefJsonNode.get(PIPELINE_KEY).get(FLINK_KEY);
+            if (flinkConfigNode != null) {
+                Map<String, String> pipelineConfigMap =
+                        mapper.convertValue(
+                                flinkConfigNode, new TypeReference<Map<String, String>>() {});
+                return pipelineConfigMap;
+            }
+        }
+        return Collections.emptyMap();
     }
 }
