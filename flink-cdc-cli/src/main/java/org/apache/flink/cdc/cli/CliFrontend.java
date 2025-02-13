@@ -163,6 +163,7 @@ public class CliFrontend {
                 flinkConfigFromPipelineDef);
         flinkConfig.addAll(flinkConfigFromPipelineDef);
 
+
         // load savepoint settings
         SavepointRestoreSettings savepointSettings =
                 createSavepointRestoreSettings(commandLine, flinkConfig);
