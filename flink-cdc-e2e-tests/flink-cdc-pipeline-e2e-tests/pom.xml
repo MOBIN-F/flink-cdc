@@ -306,6 +306,10 @@ limitations under the License.
                     <artifactId>slf4j-log4j12</artifactId>
                     <groupId>org.slf4j</groupId>
                 </exclusion>
+                <exclusion>
+                    <groupId>net.minidev</groupId>
+                    <artifactId>json-smart</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
@@ -314,6 +318,12 @@ limitations under the License.
             <artifactId>flink-yarn</artifactId>
             <version>${flink.version}</version>
             <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>net.minidev</groupId>
+                    <artifactId>json-smart</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 

@@ -24,14 +24,12 @@ import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.client.program.ClusterClientProvider;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.core.fs.FileStatus;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.yarn.YarnClusterClientFactory;
 import org.apache.flink.yarn.YarnClusterDescriptor;
 import org.apache.flink.yarn.configuration.YarnConfigOptions;
-import org.apache.flink.yarn.configuration.YarnDeploymentTarget;
 import org.apache.flink.yarn.configuration.YarnLogConfigUtil;
 
 import org.apache.flink.shaded.guava31.com.google.common.base.Joiner;
@@ -64,7 +62,6 @@ public class YarnApplicationDeploymentExecutor implements PipelineDeploymentExec
             Path flinkHome)
             throws Exception {
         LOG.info("Submitting application in 'Flink Yarn Application Mode'.");
-        flinkConfig.set(DeploymentOptions.TARGET, YarnDeploymentTarget.APPLICATION.getName());
         if (flinkConfig.get(PipelineOptions.JARS) == null) {
             flinkConfig.set(
                     PipelineOptions.JARS, Collections.singletonList(getFlinkCDCDistJarFromEnv()));
