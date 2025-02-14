@@ -143,6 +143,7 @@ public class CliFrontend {
         }
     }
 
+
     private static SavepointRestoreSettings createSavepointRestoreSettings(
             CommandLine commandLine) {
         if (commandLine.hasOption(SAVEPOINT_PATH_OPTION.getOpt())) {
