@@ -488,7 +488,28 @@ public class SchemaDerivatorTest extends SchemaTestBase {
                                         new AddColumnEvent.ColumnWithPosition(
                                                 Column.physicalColumn(
                                                         "added_flag", DataTypes.BOOLEAN()),
-                                                AddColumnEvent.ColumnPosition.LAST,
+                                                AddColumnEvent.ColumnPosition.AFTER,
+                                                "id"))));
+
+        assertThat(
+                        normalizeEvent(
+                                SchemaChangeBehavior.LENIENT,
+                                new AddColumnEvent(
+                                        NORMALIZE_TEST_TABLE_ID,
+                                        Collections.singletonList(
+                                                new AddColumnEvent.ColumnWithPosition(
+                                                        Column.physicalColumn(
+                                                                "added_flag", DataTypes.BOOLEAN()),
+                                                        AddColumnEvent.ColumnPosition.FIRST,
+                                                        null)))))
+                .containsExactly(
+                        new AddColumnEvent(
+                                NORMALIZE_TEST_TABLE_ID,
+                                Collections.singletonList(
+                                        new AddColumnEvent.ColumnWithPosition(
+                                                Column.physicalColumn(
+                                                        "added_flag", DataTypes.BOOLEAN()),
+                                                AddColumnEvent.ColumnPosition.FIRST,
                                                 null))));
 
         assertThat(
