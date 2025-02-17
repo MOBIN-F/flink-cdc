@@ -29,6 +29,7 @@ import org.apache.flink.cdc.common.event.SchemaChangeEventWithPreSchema;
 import org.apache.flink.cdc.common.event.TableId;
 import org.apache.flink.cdc.common.pipeline.SchemaChangeBehavior;
 import org.apache.flink.cdc.common.schema.Column;
+import org.apache.flink.cdc.common.schema.PhysicalColumn;
 import org.apache.flink.cdc.common.schema.Schema;
 import org.apache.flink.cdc.common.sink.MetadataApplier;
 import org.apache.flink.cdc.common.types.DataType;
@@ -280,16 +281,31 @@ public class SchemaDerivator {
                         tableId,
                         schemaChangeEvent.getAddedColumns().stream()
                                 .map(
-                                        col ->
-                                                new AddColumnEvent.ColumnWithPosition(
-                                                        Column.physicalColumn(
-                                                                col.getAddColumn().getName(),
-                                                                col.getAddColumn()
-                                                                        .getType()
-                                                                        .nullable(),
-                                                                col.getAddColumn().getComment(),
-                                                                col.getAddColumn()
-                                                                        .getDefaultValueExpression())))
+                                        col -> {
+                                            PhysicalColumn physicalColumn =
+                                                    Column.physicalColumn(
+                                                            col.getAddColumn().getName(),
+                                                            col.getAddColumn().getType().nullable(),
+                                                            col.getAddColumn().getComment(),
+                                                            col.getAddColumn()
+                                                                    .getDefaultValueExpression());
+                                            switch (col.getPosition()) {
+                                                case FIRST:
+                                                    return new AddColumnEvent.ColumnWithPosition(
+                                                            physicalColumn,
+                                                            col.getPosition(),
+                                                            null);
+                                                case BEFORE:
+                                                case AFTER:
+                                                    return new AddColumnEvent.ColumnWithPosition(
+                                                            physicalColumn,
+                                                            col.getPosition(),
+                                                            col.getExistedColumnName());
+                                                default:
+                                                    return new AddColumnEvent.ColumnWithPosition(
+                                                            physicalColumn);
+                                            }
+                                        })
                                 .collect(Collectors.toList())));
     }
 
