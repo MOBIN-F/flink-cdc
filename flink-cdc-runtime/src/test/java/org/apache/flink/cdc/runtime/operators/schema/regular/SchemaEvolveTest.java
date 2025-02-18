@@ -2363,7 +2363,9 @@ public class SchemaEvolveTest {
                                     tableId,
                                     Arrays.asList(
                                             new AddColumnEvent.ColumnWithPosition(
-                                                    Column.physicalColumn("nickname", STRING)),
+                                                    Column.physicalColumn("nickname", STRING),
+                                                    AddColumnEvent.ColumnPosition.AFTER,
+                                                    "id"),
                                             new AddColumnEvent.ColumnWithPosition(
                                                     Column.physicalColumn("extra", STRING)))),
                             DataChangeEvent.insertEvent(
@@ -2371,6 +2373,8 @@ public class SchemaEvolveTest {
                                     buildRecord(
                                             INT,
                                             12,
+                                            STRING,
+                                            "Alice",
                                             INT,
                                             0,
                                             STRING,
@@ -2378,22 +2382,20 @@ public class SchemaEvolveTest {
                                             SMALLINT,
                                             (short) 11,
                                             STRING,
-                                            "Alice",
-                                            STRING,
                                             "ailisi")),
                             DataChangeEvent.insertEvent(
                                     tableId,
                                     buildRecord(
                                             INT,
                                             13,
+                                            STRING,
+                                            "Bob",
                                             INT,
                                             0,
                                             STRING,
                                             null,
                                             SMALLINT,
                                             (short) 23,
-                                            STRING,
-                                            "Bob",
                                             STRING,
                                             "baobo")));
 
@@ -2423,10 +2425,10 @@ public class SchemaEvolveTest {
             Schema schemaV3E =
                     Schema.newBuilder()
                             .physicalColumn("id", INT)
+                            .physicalColumn("nickname", STRING)
                             .physicalColumn("iina", INT.notNull())
                             .physicalColumn("name", STRING)
                             .physicalColumn("age", SMALLINT)
-                            .physicalColumn("nickname", STRING)
                             .physicalColumn("extra", STRING)
                             .primaryKey("id")
                             .build();
@@ -2489,14 +2491,14 @@ public class SchemaEvolveTest {
                                     buildRecord(
                                             INT,
                                             41,
+                                            STRING,
+                                            "Carol",
                                             INT,
                                             null,
                                             STRING,
                                             null,
                                             SMALLINT,
                                             (short) 11,
-                                            STRING,
-                                            "Carol",
                                             STRING,
                                             "kaluo",
                                             INT,
@@ -2506,14 +2508,14 @@ public class SchemaEvolveTest {
                                     buildRecord(
                                             INT,
                                             42,
+                                            STRING,
+                                            "Dorothy",
                                             INT,
                                             null,
                                             STRING,
                                             null,
                                             SMALLINT,
                                             (short) 11,
-                                            STRING,
-                                            "Dorothy",
                                             STRING,
                                             "duoluoxi",
                                             INT,
@@ -2545,10 +2547,10 @@ public class SchemaEvolveTest {
             Schema schemaV4E =
                     Schema.newBuilder()
                             .physicalColumn("id", INT)
+                            .physicalColumn("nickname", STRING)
                             .physicalColumn("iina", INT)
                             .physicalColumn("name", STRING)
                             .physicalColumn("age", SMALLINT)
-                            .physicalColumn("nickname", STRING)
                             .physicalColumn("extra", STRING)
                             .physicalColumn("yina", INT)
                             .primaryKey("id")

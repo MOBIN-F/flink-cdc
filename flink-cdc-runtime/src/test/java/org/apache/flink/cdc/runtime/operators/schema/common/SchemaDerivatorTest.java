@@ -340,6 +340,47 @@ public class SchemaDerivatorTest extends SchemaTestBase {
         assertThat(
                         normalizeEvent(
                                 SchemaChangeBehavior.EVOLVE,
+                                new AddColumnEvent(
+                                        NORMALIZE_TEST_TABLE_ID,
+                                        Collections.singletonList(
+                                                new AddColumnEvent.ColumnWithPosition(
+                                                        Column.physicalColumn(
+                                                                "added_flag", DataTypes.BOOLEAN()),
+                                                        AddColumnEvent.ColumnPosition.FIRST,
+                                                        null)))))
+                .containsExactly(
+                        new AddColumnEvent(
+                                NORMALIZE_TEST_TABLE_ID,
+                                Collections.singletonList(
+                                        new AddColumnEvent.ColumnWithPosition(
+                                                Column.physicalColumn(
+                                                        "added_flag", DataTypes.BOOLEAN()),
+                                                AddColumnEvent.ColumnPosition.FIRST,
+                                                null))));
+
+        assertThat(
+                        normalizeEvent(
+                                SchemaChangeBehavior.EVOLVE,
+                                new AddColumnEvent(
+                                        NORMALIZE_TEST_TABLE_ID,
+                                        Collections.singletonList(
+                                                new AddColumnEvent.ColumnWithPosition(
+                                                        Column.physicalColumn(
+                                                                "added_flag",
+                                                                DataTypes.BOOLEAN()))))))
+                .containsExactly(
+                        new AddColumnEvent(
+                                NORMALIZE_TEST_TABLE_ID,
+                                Collections.singletonList(
+                                        new AddColumnEvent.ColumnWithPosition(
+                                                Column.physicalColumn(
+                                                        "added_flag", DataTypes.BOOLEAN()),
+                                                AddColumnEvent.ColumnPosition.LAST,
+                                                null))));
+
+        assertThat(
+                        normalizeEvent(
+                                SchemaChangeBehavior.EVOLVE,
                                 new AlterColumnTypeEvent(
                                         NORMALIZE_TEST_TABLE_ID,
                                         Collections.singletonMap("age", DataTypes.DOUBLE()))))
@@ -413,6 +454,47 @@ public class SchemaDerivatorTest extends SchemaTestBase {
                                                         "added_flag", DataTypes.BOOLEAN()),
                                                 AddColumnEvent.ColumnPosition.AFTER,
                                                 "id"))));
+
+        assertThat(
+                        normalizeEvent(
+                                SchemaChangeBehavior.TRY_EVOLVE,
+                                new AddColumnEvent(
+                                        NORMALIZE_TEST_TABLE_ID,
+                                        Collections.singletonList(
+                                                new AddColumnEvent.ColumnWithPosition(
+                                                        Column.physicalColumn(
+                                                                "added_flag", DataTypes.BOOLEAN()),
+                                                        AddColumnEvent.ColumnPosition.FIRST,
+                                                        null)))))
+                .containsExactly(
+                        new AddColumnEvent(
+                                NORMALIZE_TEST_TABLE_ID,
+                                Collections.singletonList(
+                                        new AddColumnEvent.ColumnWithPosition(
+                                                Column.physicalColumn(
+                                                        "added_flag", DataTypes.BOOLEAN()),
+                                                AddColumnEvent.ColumnPosition.FIRST,
+                                                null))));
+
+        assertThat(
+                        normalizeEvent(
+                                SchemaChangeBehavior.TRY_EVOLVE,
+                                new AddColumnEvent(
+                                        NORMALIZE_TEST_TABLE_ID,
+                                        Collections.singletonList(
+                                                new AddColumnEvent.ColumnWithPosition(
+                                                        Column.physicalColumn(
+                                                                "added_flag",
+                                                                DataTypes.BOOLEAN()))))))
+                .containsExactly(
+                        new AddColumnEvent(
+                                NORMALIZE_TEST_TABLE_ID,
+                                Collections.singletonList(
+                                        new AddColumnEvent.ColumnWithPosition(
+                                                Column.physicalColumn(
+                                                        "added_flag", DataTypes.BOOLEAN()),
+                                                AddColumnEvent.ColumnPosition.LAST,
+                                                null))));
 
         assertThat(
                         normalizeEvent(
@@ -515,6 +597,47 @@ public class SchemaDerivatorTest extends SchemaTestBase {
         assertThat(
                         normalizeEvent(
                                 SchemaChangeBehavior.LENIENT,
+                                new AddColumnEvent(
+                                        NORMALIZE_TEST_TABLE_ID,
+                                        Collections.singletonList(
+                                                new AddColumnEvent.ColumnWithPosition(
+                                                        Column.physicalColumn(
+                                                                "added_flag", DataTypes.BOOLEAN()),
+                                                        AddColumnEvent.ColumnPosition.FIRST,
+                                                        null)))))
+                .containsExactly(
+                        new AddColumnEvent(
+                                NORMALIZE_TEST_TABLE_ID,
+                                Collections.singletonList(
+                                        new AddColumnEvent.ColumnWithPosition(
+                                                Column.physicalColumn(
+                                                        "added_flag", DataTypes.BOOLEAN()),
+                                                AddColumnEvent.ColumnPosition.FIRST,
+                                                null))));
+
+        assertThat(
+                        normalizeEvent(
+                                SchemaChangeBehavior.LENIENT,
+                                new AddColumnEvent(
+                                        NORMALIZE_TEST_TABLE_ID,
+                                        Collections.singletonList(
+                                                new AddColumnEvent.ColumnWithPosition(
+                                                        Column.physicalColumn(
+                                                                "added_flag",
+                                                                DataTypes.BOOLEAN()))))))
+                .containsExactly(
+                        new AddColumnEvent(
+                                NORMALIZE_TEST_TABLE_ID,
+                                Collections.singletonList(
+                                        new AddColumnEvent.ColumnWithPosition(
+                                                Column.physicalColumn(
+                                                        "added_flag", DataTypes.BOOLEAN()),
+                                                AddColumnEvent.ColumnPosition.LAST,
+                                                null))));
+
+        assertThat(
+                        normalizeEvent(
+                                SchemaChangeBehavior.LENIENT,
                                 new AlterColumnTypeEvent(
                                         NORMALIZE_TEST_TABLE_ID,
                                         Collections.singletonMap("age", DataTypes.DOUBLE()))))
@@ -582,6 +705,31 @@ public class SchemaDerivatorTest extends SchemaTestBase {
                                                                 "added_flag", DataTypes.BOOLEAN()),
                                                         AddColumnEvent.ColumnPosition.AFTER,
                                                         "id")))))
+                .isEmpty();
+
+        assertThat(
+                        normalizeEvent(
+                                SchemaChangeBehavior.IGNORE,
+                                new AddColumnEvent(
+                                        NORMALIZE_TEST_TABLE_ID,
+                                        Collections.singletonList(
+                                                new AddColumnEvent.ColumnWithPosition(
+                                                        Column.physicalColumn(
+                                                                "added_flag", DataTypes.BOOLEAN()),
+                                                        AddColumnEvent.ColumnPosition.FIRST,
+                                                        null)))))
+                .isEmpty();
+
+        assertThat(
+                        normalizeEvent(
+                                SchemaChangeBehavior.IGNORE,
+                                new AddColumnEvent(
+                                        NORMALIZE_TEST_TABLE_ID,
+                                        Collections.singletonList(
+                                                new AddColumnEvent.ColumnWithPosition(
+                                                        Column.physicalColumn(
+                                                                "added_flag",
+                                                                DataTypes.BOOLEAN()))))))
                 .isEmpty();
 
         assertThat(
