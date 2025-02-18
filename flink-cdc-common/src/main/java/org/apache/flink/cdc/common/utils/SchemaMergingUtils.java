@@ -76,6 +76,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 /**
@@ -140,7 +141,7 @@ public class SchemaMergingUtils {
         List<Column> appendedColumns = new ArrayList<>();
         List<Column> commonColumns = new ArrayList<>();
 
-        List<Column> commonColumns1 = new ArrayList<>();
+        CopyOnWriteArrayList<Column> commonColumns1 = new CopyOnWriteArrayList<>();
         currentSchema.getColumns().forEach(x -> commonColumns1.add(x));
 
         // 按照list2的顺序添加新元素
