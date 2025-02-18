@@ -272,6 +272,13 @@ class SchemaMergingUtilsTest {
         Assertions.assertThat(
                         getLeastCommonSchema(
                                 of("id", BIGINT, "name", VARCHAR(17)),
+                                of("id", BIGINT, "age", INT, "name", VARCHAR(17))))
+                .as("test identical schema")
+                .isEqualTo(of("id", BIGINT, "age", INT, "name", VARCHAR(17)));
+
+        Assertions.assertThat(
+                        getLeastCommonSchema(
+                                of("id", BIGINT, "name", VARCHAR(17)),
                                 of("name", VARCHAR(17), "id", BIGINT)))
                 .as("swapping sequence is ok")
                 .isEqualTo(of("id", BIGINT, "name", VARCHAR(17)));
@@ -354,6 +361,28 @@ class SchemaMergingUtilsTest {
                                 of("id", BIGINT, "bar", INT, "baz", DOUBLE)))
                 .as("mixed schema differences")
                 .isEqualTo(of("id", BIGINT, "foo", INT, "baz", DOUBLE, "bar", INT));
+    }
+
+    @Test
+    void testGetLeastCommonSchema1() {
+        //
+        //        Assertions.assertThat(
+        //                        getLeastCommonSchema(
+        //                                of("id", BIGINT, "name", VARCHAR(17)),
+        //                                of("id", BIGINT, "age", INT, "name", VARCHAR(17))))
+        //                .as("test identical schema")
+        //                .isEqualTo(of("id", BIGINT, "age", INT, "name", VARCHAR(17)));
+
+        Assertions.assertThat(mergeAndDiff(of("id", BIGINT), of("id", BIGINT, "name", VARCHAR(17))))
+                .as("test a narrower upcoming schema")
+                .containsExactly(
+                        new AddColumnEvent(
+                                TABLE_ID,
+                                Collections.singletonList(
+                                        new AddColumnEvent.ColumnWithPosition(
+                                                Column.physicalColumn("name", VARCHAR(17)),
+                                                AddColumnEvent.ColumnPosition.AFTER,
+                                                "id"))));
     }
 
     @Test
