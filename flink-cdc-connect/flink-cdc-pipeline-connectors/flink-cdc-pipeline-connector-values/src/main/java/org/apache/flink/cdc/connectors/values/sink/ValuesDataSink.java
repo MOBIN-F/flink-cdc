@@ -54,29 +54,24 @@ public class ValuesDataSink implements DataSink, Serializable {
 
     private final boolean errorOnSchemaChange;
 
-    private final boolean includeSchemaInfo;
-
     public ValuesDataSink(
             boolean materializedInMemory,
             boolean print,
             SinkApi sinkApi,
-            boolean errorOnSchemaChange,
-            boolean includeSchemaInfo) {
+            boolean errorOnSchemaChange) {
         this.materializedInMemory = materializedInMemory;
         this.print = print;
         this.sinkApi = sinkApi;
         this.errorOnSchemaChange = errorOnSchemaChange;
-        this.includeSchemaInfo = includeSchemaInfo;
     }
 
     @Override
     public EventSinkProvider getEventSinkProvider() {
         if (SinkApi.SINK_V2.equals(sinkApi)) {
-            return FlinkSinkProvider.of(
-                    new ValuesSink(materializedInMemory, print, includeSchemaInfo));
+            return FlinkSinkProvider.of(new ValuesSink(materializedInMemory, print));
         } else {
             return FlinkSinkFunctionProvider.of(
-                    new ValuesDataSinkFunction(materializedInMemory, print, includeSchemaInfo));
+                    new ValuesDataSinkFunction(materializedInMemory, print));
         }
     }
 
@@ -96,12 +91,9 @@ public class ValuesDataSink implements DataSink, Serializable {
 
         private final boolean print;
 
-        private final boolean includeSchemaInfo;
-
-        public ValuesSink(boolean materializedInMemory, boolean print, boolean includeSchemaInfo) {
+        public ValuesSink(boolean materializedInMemory, boolean print) {
             this.materializedInMemory = materializedInMemory;
             this.print = print;
-            this.includeSchemaInfo = includeSchemaInfo;
         }
 
         @Override
@@ -110,8 +102,7 @@ public class ValuesDataSink implements DataSink, Serializable {
                     materializedInMemory,
                     print,
                     context.getSubtaskId(),
-                    context.getNumberOfParallelSubtasks(),
-                    includeSchemaInfo);
+                    context.getNumberOfParallelSubtasks());
         }
     }
 
@@ -128,8 +119,6 @@ public class ValuesDataSink implements DataSink, Serializable {
 
         private final int numSubtasks;
 
-        private final boolean includeSchemaInfo;
-
         /**
          * keep the relationship of TableId and Schema as write method may rely on the schema
          * information of DataChangeEvent.
@@ -139,11 +128,7 @@ public class ValuesDataSink implements DataSink, Serializable {
         private final Map<TableId, List<RecordData.FieldGetter>> fieldGetterMaps;
 
         public ValuesSinkWriter(
-                boolean materializedInMemory,
-                boolean print,
-                int subtaskIndex,
-                int numSubtasks,
-                boolean includeSchemaInfo) {
+                boolean materializedInMemory, boolean print, int subtaskIndex, int numSubtasks) {
             super();
             this.materializedInMemory = materializedInMemory;
             this.print = print;
@@ -151,7 +136,6 @@ public class ValuesDataSink implements DataSink, Serializable {
             this.numSubtasks = numSubtasks;
             schemaMaps = new HashMap<>();
             fieldGetterMaps = new HashMap<>();
-            this.includeSchemaInfo = includeSchemaInfo;
         }
 
         @Override
@@ -183,8 +167,7 @@ public class ValuesDataSink implements DataSink, Serializable {
                         prefix
                                 + ValuesDataSinkHelper.convertEventToStr(
                                         event,
-                                        fieldGetterMaps.get(((ChangeEvent) event).tableId()),
-                                        includeSchemaInfo));
+                                        fieldGetterMaps.get(((ChangeEvent) event).tableId())));
             }
         }
 

@@ -57,8 +57,7 @@ public class CanalJsonSerializationSchemaTest {
                 ChangeLogJsonFormatFactory.createSerializationSchema(
                         new Configuration(),
                         JsonSerializationType.CANAL_JSON,
-                        ZoneId.systemDefault(),
-                        false);
+                        ZoneId.systemDefault());
         serializationSchema.open(new MockInitializationContext());
 
         // create table

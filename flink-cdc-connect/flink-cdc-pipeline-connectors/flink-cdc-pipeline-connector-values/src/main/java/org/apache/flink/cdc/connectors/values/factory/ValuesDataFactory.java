@@ -58,9 +58,8 @@ public class ValuesDataFactory implements DataSourceFactory, DataSinkFactory {
                 context.getFactoryConfiguration().get(ValuesDataSinkOptions.MATERIALIZED_IN_MEMORY),
                 context.getFactoryConfiguration().get(ValuesDataSinkOptions.PRINT_ENABLED),
                 context.getFactoryConfiguration().get(ValuesDataSinkOptions.SINK_API),
-                context.getFactoryConfiguration().get(ValuesDataSinkOptions.ERROR_ON_SCHEMA_CHANGE),
                 context.getFactoryConfiguration()
-                        .get(ValuesDataSinkOptions.SINK_SCHEMA_INFO_ENABLED));
+                        .get(ValuesDataSinkOptions.ERROR_ON_SCHEMA_CHANGE));
     }
 
     @Override
@@ -82,7 +81,6 @@ public class ValuesDataFactory implements DataSourceFactory, DataSinkFactory {
         options.add(ValuesDataSinkOptions.PRINT_ENABLED);
         options.add(ValuesDataSinkOptions.SINK_API);
         options.add(ValuesDataSinkOptions.ERROR_ON_SCHEMA_CHANGE);
-        options.add(ValuesDataSinkOptions.SINK_SCHEMA_INFO_ENABLED);
         return options;
     }
 }

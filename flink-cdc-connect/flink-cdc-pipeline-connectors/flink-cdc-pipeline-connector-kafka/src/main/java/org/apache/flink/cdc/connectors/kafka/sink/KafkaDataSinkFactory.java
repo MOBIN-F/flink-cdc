@@ -41,7 +41,7 @@ import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.PA
 import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.PROPERTIES_PREFIX;
 import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.SINK_ADD_TABLEID_TO_HEADER_ENABLED;
 import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.SINK_CUSTOM_HEADER;
-import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.SINK_SCHEMA_INFO_ENABLED;
+import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.SINK_TABLE_ID_TO_TOPIC_MAPPING;
 import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.TOPIC;
 import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.VALUE_FORMAT;
 
@@ -68,14 +68,13 @@ public class KafkaDataSinkFactory implements DataSinkFactory {
                                     .get(PipelineOptions.PIPELINE_LOCAL_TIME_ZONE));
         }
         KeyFormat keyFormat = context.getFactoryConfiguration().get(KEY_FORMAT);
-        Boolean includeSchemaInfo = context.getFactoryConfiguration().get(SINK_SCHEMA_INFO_ENABLED);
         SerializationSchema<Event> keySerialization =
                 KeySerializationFactory.createSerializationSchema(configuration, keyFormat, zoneId);
         JsonSerializationType jsonSerializationType =
                 context.getFactoryConfiguration().get(KafkaDataSinkOptions.VALUE_FORMAT);
         SerializationSchema<Event> valueSerialization =
                 ChangeLogJsonFormatFactory.createSerializationSchema(
-                        configuration, jsonSerializationType, zoneId, includeSchemaInfo);
+                        configuration, jsonSerializationType, zoneId);
         final Properties kafkaProperties = new Properties();
         Map<String, String> allOptions = context.getFactoryConfiguration().toMap();
         allOptions.keySet().stream()
@@ -127,7 +126,6 @@ public class KafkaDataSinkFactory implements DataSinkFactory {
         options.add(TOPIC);
         options.add(SINK_ADD_TABLEID_TO_HEADER_ENABLED);
         options.add(SINK_CUSTOM_HEADER);
-        options.add(SINK_SCHEMA_INFO_ENABLED);
         options.add(KafkaDataSinkOptions.DELIVERY_GUARANTEE);
         options.add(SINK_TABLE_ID_TO_TOPIC_MAPPING);
         return options;

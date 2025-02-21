@@ -317,13 +317,12 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                                 + "  tables: %s.\\.*\n"
                                 + "  server-id: 5400-5404\n"
                                 + "  server-time-zone: UTC\n"
-                                + "  schema-info.enabled: true\n"
+                                + "  metadata.list: schema\n"
                                 + "\n"
                                 + "sink:\n"
                                 + "  type: kafka\n"
                                 + "  properties.bootstrap.servers: kafka:9092\n"
                                 + "  topic: %s\n"
-                                + "  sink.schema-info-enabled: true\n"
                                 + "\n"
                                 + "pipeline:\n"
                                 + "  parallelism: %d",
@@ -354,9 +353,9 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                         MYSQL.getDatabasePort(),
                         mysqlInventoryDatabase.getDatabaseName());
         try (Connection conn =
-                     DriverManager.getConnection(
-                             mysqlJdbcUrl, MYSQL_TEST_USER, MYSQL_TEST_PASSWORD);
-             Statement stat = conn.createStatement()) {
+                        DriverManager.getConnection(
+                                mysqlJdbcUrl, MYSQL_TEST_USER, MYSQL_TEST_PASSWORD);
+                Statement stat = conn.createStatement()) {
             stat.execute("UPDATE products SET description='18oz carpenter hammer' WHERE id=106;");
             stat.execute("UPDATE products SET weight='5.1' WHERE id=107;");
 
@@ -380,7 +379,6 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         assertThat(expectedRecords)
                 .containsExactlyInAnyOrderElementsOf(deserializeValues(collectedRecords));
     }
-
 
     private void waitUntilSpecificEventCount(
             List<ConsumerRecord<byte[], byte[]>> actualEvent, int expectedCount) throws Exception {

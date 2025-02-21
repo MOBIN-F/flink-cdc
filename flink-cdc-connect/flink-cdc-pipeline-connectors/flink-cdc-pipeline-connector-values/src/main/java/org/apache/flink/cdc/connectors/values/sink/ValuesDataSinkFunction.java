@@ -40,8 +40,6 @@ public class ValuesDataSinkFunction implements SinkFunction<Event> {
 
     private final boolean print;
 
-    private final boolean includeSchemaInfo;
-
     /**
      * keep the relationship of TableId and Schema as write method may rely on the schema
      * information of DataChangeEvent.
@@ -50,13 +48,11 @@ public class ValuesDataSinkFunction implements SinkFunction<Event> {
 
     private final Map<TableId, List<RecordData.FieldGetter>> fieldGetterMaps;
 
-    public ValuesDataSinkFunction(
-            boolean materializedInMemory, boolean print, boolean includeSchemaInfo) {
+    public ValuesDataSinkFunction(boolean materializedInMemory, boolean print) {
         this.materializedInMemory = materializedInMemory;
         this.print = print;
         schemaMaps = new HashMap<>();
         fieldGetterMaps = new HashMap<>();
-        this.includeSchemaInfo = includeSchemaInfo;
     }
 
     @Override
@@ -86,9 +82,7 @@ public class ValuesDataSinkFunction implements SinkFunction<Event> {
             // print the detail message to console for verification.
             System.out.println(
                     ValuesDataSinkHelper.convertEventToStr(
-                            event,
-                            fieldGetterMaps.get(((ChangeEvent) event).tableId()),
-                            includeSchemaInfo));
+                            event, fieldGetterMaps.get(((ChangeEvent) event).tableId())));
         }
     }
 

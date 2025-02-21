@@ -70,7 +70,8 @@ public class DebeziumJsonRowDataSerializationSchema implements SerializationSche
     /** Flag indicating whether to serialize all decimals as plain numbers. */
     private final boolean encodeDecimalAsPlainNumber;
 
-    private final boolean includeSchemaInfo;
+    /** Flag indicating whether to ignore null fields. */
+    private final boolean ignoreNullFields;
 
     public DebeziumJsonRowDataSerializationSchema(
             RowType rowType,
@@ -78,7 +79,7 @@ public class DebeziumJsonRowDataSerializationSchema implements SerializationSche
             JsonFormatOptions.MapNullKeyMode mapNullKeyMode,
             String mapNullKeyLiteral,
             boolean encodeDecimalAsPlainNumber,
-            boolean includeSchemaInfo) {
+            boolean ignoreNullFields) {
         this.rowType = rowType;
         this.timestampFormat = timestampFormat;
         this.mapNullKeyMode = mapNullKeyMode;
@@ -87,7 +88,7 @@ public class DebeziumJsonRowDataSerializationSchema implements SerializationSche
         this.runtimeConverter =
                 new RowDataToJsonConverters(timestampFormat, mapNullKeyMode, mapNullKeyLiteral)
                         .createConverter(rowType);
-        this.includeSchemaInfo = includeSchemaInfo;
+        this.ignoreNullFields = ignoreNullFields;
     }
 
     @Override
@@ -101,20 +102,25 @@ public class DebeziumJsonRowDataSerializationSchema implements SerializationSche
 
     @Override
     public byte[] serialize(RowData row) {
-        if (node == null) {
+        if (node == null || ignoreNullFields) {
             node = mapper.createObjectNode();
         }
 
         try {
             runtimeConverter.convert(mapper, node, row);
-            if (includeSchemaInfo) {
-                // schema is a nested json string, asText() can return a pure string without other
+            if (node.path("schema").isNull()) {
+                String payload = node.get("payload").toString();
+                JsonNode payloadNode = mapper.readTree(payload);
+                return mapper.writeValueAsBytes(payloadNode);
+            } else {
+                // schema is a nested json string, asText() can return a pure string
+                // without other
                 // escape characters such as "\"
                 String schemaValue = node.get("schema").asText();
                 JsonNode schemaNode = mapper.readTree(schemaValue);
                 node.set("schema", schemaNode);
+                return mapper.writeValueAsBytes(node);
             }
-            return mapper.writeValueAsBytes(node);
         } catch (Throwable t) {
             throw new RuntimeException(String.format("Could not serialize row '%s'.", row), t);
         }
@@ -133,7 +139,8 @@ public class DebeziumJsonRowDataSerializationSchema implements SerializationSche
                 && timestampFormat.equals(that.timestampFormat)
                 && mapNullKeyMode.equals(that.mapNullKeyMode)
                 && mapNullKeyLiteral.equals(that.mapNullKeyLiteral)
-                && encodeDecimalAsPlainNumber == that.encodeDecimalAsPlainNumber;
+                && encodeDecimalAsPlainNumber == that.encodeDecimalAsPlainNumber
+                && ignoreNullFields == that.ignoreNullFields;
     }
 
     @Override
@@ -143,6 +150,7 @@ public class DebeziumJsonRowDataSerializationSchema implements SerializationSche
                 timestampFormat,
                 mapNullKeyMode,
                 mapNullKeyLiteral,
-                encodeDecimalAsPlainNumber);
+                encodeDecimalAsPlainNumber,
+                ignoreNullFields);
     }
 }

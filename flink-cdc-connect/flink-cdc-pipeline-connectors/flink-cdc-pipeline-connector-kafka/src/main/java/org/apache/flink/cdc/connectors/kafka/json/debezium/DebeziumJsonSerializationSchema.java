@@ -27,10 +27,8 @@ import org.apache.flink.cdc.common.schema.Schema;
 import org.apache.flink.cdc.common.types.utils.DataTypeUtils;
 import org.apache.flink.cdc.common.utils.SchemaUtils;
 import org.apache.flink.cdc.connectors.kafka.json.TableSchemaInfo;
-import org.apache.flink.cdc.connectors.kafka.utils.JsonRowDataSerializationSchemaUtils;
 import org.apache.flink.formats.common.TimestampFormat;
 import org.apache.flink.formats.json.JsonFormatOptions;
-import org.apache.flink.formats.json.JsonRowDataSerializationSchema;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.StringData;
@@ -90,16 +88,13 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
 
     private InitializationContext context;
 
-    private final boolean includeSchemaInfo;
-
     public DebeziumJsonSerializationSchema(
             TimestampFormat timestampFormat,
             JsonFormatOptions.MapNullKeyMode mapNullKeyMode,
             String mapNullKeyLiteral,
             ZoneId zoneId,
             boolean encodeDecimalAsPlainNumber,
-            boolean ignoreNullFields,
-            boolean includeSchemaInfo) {
+            boolean ignoreNullFields) {
         this.timestampFormat = timestampFormat;
         this.mapNullKeyMode = mapNullKeyMode;
         this.mapNullKeyLiteral = mapNullKeyLiteral;
@@ -107,19 +102,13 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
         this.zoneId = zoneId;
         jsonSerializers = new HashMap<>();
         this.ignoreNullFields = ignoreNullFields;
-        this.includeSchemaInfo = includeSchemaInfo;
     }
 
     @Override
     public void open(InitializationContext context) {
-        if (includeSchemaInfo) {
-            reuseGenericRowData = new GenericRowData(2);
-            payloadGenericRowData = new GenericRowData(4);
-
-            reuseGenericRowData.setField(PAYLOAD.getPosition(), payloadGenericRowData);
-        } else {
-            reuseGenericRowData = new GenericRowData(4);
-        }
+        reuseGenericRowData = new GenericRowData(2);
+        payloadGenericRowData = new GenericRowData(4);
+        reuseGenericRowData.setField(PAYLOAD.getPosition(), payloadGenericRowData);
         this.context = context;
     }
 
@@ -141,13 +130,12 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
                     DataTypeUtils.toFlinkDataType(schema.toRowDataType()).getLogicalType();
             DebeziumJsonRowDataSerializationSchema jsonSerializer =
                     new DebeziumJsonRowDataSerializationSchema(
-                            createJsonRowType(fromLogicalToDataType(rowType), includeSchemaInfo),
+                            createJsonRowType(fromLogicalToDataType(rowType)),
                             timestampFormat,
                             mapNullKeyMode,
                             mapNullKeyLiteral,
                             encodeDecimalAsPlainNumber,
-                            ignoreNullFields,
-                            includeSchemaInfo);
+                            ignoreNullFields);
             try {
                 jsonSerializer.open(context);
             } catch (Exception e) {
@@ -180,21 +168,15 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
                                     "Unsupported operation '%s' for OperationType.",
                                     dataChangeEvent.op()));
             }
+            converter.accept(dataChangeEvent, payloadGenericRowData);
 
-            GenericRowData genericRowData =
-                    includeSchemaInfo ? payloadGenericRowData : reuseGenericRowData;
-            converter.accept(dataChangeEvent, genericRowData);
-
-            if (includeSchemaInfo) {
-                reuseGenericRowData.setField(
-                        SCHEMA.getPosition(), StringData.fromString(dataChangeEvent.getSchema()));
-            }
+            String schemaStr = dataChangeEvent.meta().getOrDefault("schema", null);
+            reuseGenericRowData.setField(SCHEMA.getPosition(), StringData.fromString(schemaStr));
 
             return jsonSerializers
                     .get(dataChangeEvent.tableId())
                     .getSerializationSchema()
                     .serialize(reuseGenericRowData);
-
         } catch (Throwable t) {
             throw new RuntimeException(format("Could not serialize event '%s'.", event), t);
         }
@@ -257,7 +239,7 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
      * href="https://debezium.io/documentation/reference/1.9/connectors/mysql.html">Debezium
      * docs</a> for more details.
      */
-    private static RowType createJsonRowType(DataType databaseSchema, boolean includeSchemaInfo) {
+    private static RowType createJsonRowType(DataType databaseSchema) {
         DataType payloadRowType =
                 DataTypes.ROW(
                         DataTypes.FIELD(BEFORE.getFieldName(), databaseSchema),
@@ -270,15 +252,10 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
                                                 DATABASE.getFieldName(), DataTypes.STRING()),
                                         DataTypes.FIELD(
                                                 TABLE.getFieldName(), DataTypes.STRING()))));
-
-        if (includeSchemaInfo) {
-            return (RowType)
-                    DataTypes.ROW(
-                                    DataTypes.FIELD(SCHEMA.getFieldName(), DataTypes.STRING()),
-                                    DataTypes.FIELD(PAYLOAD.getFieldName(), payloadRowType))
-                            .getLogicalType();
-        } else {
-            return (RowType) payloadRowType.getLogicalType();
-        }
+        return (RowType)
+                DataTypes.ROW(
+                                DataTypes.FIELD(SCHEMA.getFieldName(), DataTypes.STRING()),
+                                DataTypes.FIELD(PAYLOAD.getFieldName(), payloadRowType))
+                        .getLogicalType();
     }
 }
