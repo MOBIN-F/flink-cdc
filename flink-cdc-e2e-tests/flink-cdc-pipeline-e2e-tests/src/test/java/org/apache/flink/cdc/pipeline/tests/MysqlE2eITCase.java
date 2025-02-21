@@ -404,16 +404,16 @@ public class MysqlE2eITCase extends PipelineTestEnvironment {
         validateResult(
                 "CreateTableEvent{tableId=%s.customers, schema=columns={`id` INT NOT NULL,`name` VARCHAR(255) NOT NULL 'flink',`address` VARCHAR(1024),`phone_number` VARCHAR(512)}, primaryKeys=id, options=()}",
                 "DataChangeEvent{tableId=%s.customers, before=[], after=[104, user_4, Shanghai, 123567891234], op=INSERT, meta=("
-                        + productsSchemaInfo
+                        + customersSchemaInfo
                         + ")}",
                 "DataChangeEvent{tableId=%s.customers, before=[], after=[103, user_3, Shanghai, 123567891234], op=INSERT, meta=("
-                        + productsSchemaInfo
+                        + customersSchemaInfo
                         + ")}",
                 "DataChangeEvent{tableId=%s.customers, before=[], after=[102, user_2, Shanghai, 123567891234], op=INSERT, meta=("
-                        + productsSchemaInfo
+                        + customersSchemaInfo
                         + ")}",
                 "DataChangeEvent{tableId=%s.customers, before=[], after=[101, user_1, Shanghai, 123567891234], op=INSERT, meta=("
-                        + productsSchemaInfo
+                        + customersSchemaInfo
                         + ")}",
                 "CreateTableEvent{tableId=%s.products, schema=columns={`id` INT NOT NULL,`name` VARCHAR(255) NOT NULL 'flink',`description` VARCHAR(512),`weight` FLOAT,`enum_c` STRING 'red',`json_c` STRING,`point_c` STRING}, primaryKeys=id, options=()}",
                 "DataChangeEvent{tableId=%s.products, before=[], after=[109, spare tire, 24 inch spare tire, 22.2, null, null, null], op=INSERT, meta=("
@@ -565,7 +565,7 @@ public class MysqlE2eITCase extends PipelineTestEnvironment {
                             + ")",
                     "AlterColumnTypeEvent{tableId=%s.products, typeMapping={new_col=BIGINT}, oldTypeMapping={new_col=INT}}",
                     "DataChangeEvent{tableId=%s.products, before=[], after=[112, derrida, forever 21, 2.1728, null, null, null, 2147483649], op=INSERT, meta=("
-                            + productsSchemaInfoRenameNewColumn
+                            + productsSchemaInfoModifyNewCol
                             + ")",
                     "RenameColumnEvent{tableId=%s.products, nameMapping={new_col=new_column}}",
                     "DataChangeEvent{tableId=%s.products, before=[], after=[113, dynazenon, SSSS, 2.1728, null, null, null, 2147483649], op=INSERT, meta=("

@@ -113,8 +113,7 @@ public class DebeziumJsonRowDataSerializationSchema implements SerializationSche
                 JsonNode payloadNode = mapper.readTree(payload);
                 return mapper.writeValueAsBytes(payloadNode);
             } else {
-                // schema is a nested json string, asText() can return a pure string
-                // without other
+                // schema is a nested json string, asText() can return a pure string without other
                 // escape characters such as "\"
                 String schemaValue = node.get("schema").asText();
                 JsonNode schemaNode = mapper.readTree(schemaValue);
