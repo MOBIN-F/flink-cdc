@@ -352,7 +352,7 @@ public class MysqlE2eITCase extends PipelineTestEnvironment {
                                 + "sink:\n"
                                 + "  type: values\n"
                                 + "\n"
-                                + "pipieline:\n"
+                                + "pipeline:\n"
                                 + "  parallelism: %d\n"
                                 + "  schema.change.behavior: evolve",
                         INTER_CONTAINER_MYSQL_ALIAS,
