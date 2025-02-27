@@ -23,14 +23,14 @@ import org.apache.flink.cdc.common.event.DataChangeEvent;
 import org.apache.flink.cdc.common.event.Event;
 import org.apache.flink.cdc.common.event.SchemaChangeEvent;
 import org.apache.flink.cdc.common.event.TableId;
+import org.apache.flink.cdc.common.schema.Column;
 import org.apache.flink.cdc.common.schema.Schema;
+import org.apache.flink.cdc.common.types.DecimalType;
 import org.apache.flink.cdc.common.types.utils.DataTypeUtils;
 import org.apache.flink.cdc.common.utils.SchemaUtils;
 import org.apache.flink.cdc.connectors.kafka.json.TableSchemaInfo;
-import org.apache.flink.cdc.connectors.kafka.utils.JsonRowDataSerializationSchemaUtils;
 import org.apache.flink.formats.common.TimestampFormat;
 import org.apache.flink.formats.json.JsonFormatOptions;
-import org.apache.flink.formats.json.JsonRowDataSerializationSchema;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.StringData;
@@ -38,11 +38,32 @@ import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
 
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.debezium.data.Bits;
+import io.debezium.time.Date;
+import io.debezium.time.MicroTime;
+import io.debezium.time.Timestamp;
+import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.json.JsonConverter;
+import org.apache.kafka.connect.storage.ConverterConfig;
+import org.apache.kafka.connect.storage.ConverterType;
+
 import java.time.ZoneId;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 import static java.lang.String.format;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.AFTER;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.BEFORE;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.OPERATION;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.SOURCE;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumSource.DATABASE;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumSource.TABLE;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumStruct.PAYLOAD;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumStruct.SCHEMA;
 import static org.apache.flink.table.types.utils.TypeConversions.fromLogicalToDataType;
 
 /**
@@ -65,6 +86,8 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
 
     private transient GenericRowData reuseGenericRowData;
 
+    private transient GenericRowData payloadGenericRowData;
+
     private final TimestampFormat timestampFormat;
 
     private final JsonFormatOptions.MapNullKeyMode mapNullKeyMode;
@@ -78,6 +101,10 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
     private final ZoneId zoneId;
 
     private InitializationContext context;
+
+    private Map<TableId, ObjectNode> schemaMap = new HashMap<>();
+
+    JsonConverter jsonConverter;
 
     public DebeziumJsonSerializationSchema(
             TimestampFormat timestampFormat,
@@ -97,8 +124,14 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
 
     @Override
     public void open(InitializationContext context) {
-        reuseGenericRowData = new GenericRowData(4);
+        reuseGenericRowData = new GenericRowData(2);
+        payloadGenericRowData = new GenericRowData(4);
+        reuseGenericRowData.setField(PAYLOAD.getPosition(), payloadGenericRowData);
         this.context = context;
+        this.jsonConverter = new JsonConverter();
+        final HashMap<String, Object> configs = new HashMap<>(2);
+        configs.put(ConverterConfig.TYPE_CONFIG, ConverterType.VALUE.getName());
+        jsonConverter.configure(configs);
     }
 
     @Override
@@ -115,10 +148,14 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
                                 jsonSerializers.get(schemaChangeEvent.tableId()).getSchema(),
                                 schemaChangeEvent);
             }
+
+            schemaMap.put(
+                    schemaChangeEvent.tableId(),
+                    convertSchemaToDebeziumSchema(schema, schemaChangeEvent.tableId().toString()));
             LogicalType rowType =
                     DataTypeUtils.toFlinkDataType(schema.toRowDataType()).getLogicalType();
-            JsonRowDataSerializationSchema jsonSerializer =
-                    JsonRowDataSerializationSchemaUtils.createSerializationSchema(
+            DebeziumJsonRowDataSerializationSchema jsonSerializer =
+                    new DebeziumJsonRowDataSerializationSchema(
                             createJsonRowType(fromLogicalToDataType(rowType)),
                             timestampFormat,
                             mapNullKeyMode,
@@ -138,63 +175,175 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
         }
 
         DataChangeEvent dataChangeEvent = (DataChangeEvent) event;
-        reuseGenericRowData.setField(
-                3,
-                GenericRowData.of(
-                        StringData.fromString(dataChangeEvent.tableId().getSchemaName()),
-                        StringData.fromString(dataChangeEvent.tableId().getTableName())));
+        BiConsumer<DataChangeEvent, GenericRowData> converter;
         try {
             switch (dataChangeEvent.op()) {
                 case INSERT:
-                    reuseGenericRowData.setField(0, null);
-                    reuseGenericRowData.setField(
-                            1,
-                            jsonSerializers
-                                    .get(dataChangeEvent.tableId())
-                                    .getRowDataFromRecordData(dataChangeEvent.after(), false));
-                    reuseGenericRowData.setField(2, OP_INSERT);
-                    return jsonSerializers
-                            .get(dataChangeEvent.tableId())
-                            .getSerializationSchema()
-                            .serialize(reuseGenericRowData);
+                    converter = this::convertInsertEventToRowData;
+                    break;
                 case DELETE:
-                    reuseGenericRowData.setField(
-                            0,
-                            jsonSerializers
-                                    .get(dataChangeEvent.tableId())
-                                    .getRowDataFromRecordData(dataChangeEvent.before(), false));
-                    reuseGenericRowData.setField(1, null);
-                    reuseGenericRowData.setField(2, OP_DELETE);
-                    return jsonSerializers
-                            .get(dataChangeEvent.tableId())
-                            .getSerializationSchema()
-                            .serialize(reuseGenericRowData);
+                    converter = this::convertDeleteEventToRowData;
+                    break;
                 case UPDATE:
                 case REPLACE:
-                    reuseGenericRowData.setField(
-                            0,
-                            jsonSerializers
-                                    .get(dataChangeEvent.tableId())
-                                    .getRowDataFromRecordData(dataChangeEvent.before(), false));
-                    reuseGenericRowData.setField(
-                            1,
-                            jsonSerializers
-                                    .get(dataChangeEvent.tableId())
-                                    .getRowDataFromRecordData(dataChangeEvent.after(), false));
-                    reuseGenericRowData.setField(2, OP_UPDATE);
-                    return jsonSerializers
-                            .get(dataChangeEvent.tableId())
-                            .getSerializationSchema()
-                            .serialize(reuseGenericRowData);
+                    converter = this::convertUpdateEventToRowData;
+                    break;
                 default:
                     throw new UnsupportedOperationException(
                             format(
                                     "Unsupported operation '%s' for OperationType.",
                                     dataChangeEvent.op()));
             }
+            converter.accept(dataChangeEvent, payloadGenericRowData);
+
+            reuseGenericRowData.setField(
+                    SCHEMA.getPosition(),
+                    StringData.fromString(schemaMap.get(dataChangeEvent.tableId()).toString()));
+            //            String schemaStr = dataChangeEvent.meta().getOrDefault("schema", null);
+            //            reuseGenericRowData.setField(SCHEMA.getPosition(),
+            // StringData.fromString(schemaStr));
+
+            return jsonSerializers
+                    .get(dataChangeEvent.tableId())
+                    .getSerializationSchema()
+                    .serialize(reuseGenericRowData);
         } catch (Throwable t) {
             throw new RuntimeException(format("Could not serialize event '%s'.", event), t);
         }
+    }
+
+    /** Convert CDC Schema to Debezium Schema. */
+    public ObjectNode convertSchemaToDebeziumSchema(Schema schema, String tableName) {
+        List<Column> columns = schema.getColumns();
+        // schema names have the format connector-name.database-name.table-name:
+        // https://debezium.io/documentation/reference/3.1/connectors/mysql.html#mysql-change-event-keys
+        String schemaDescribes = "kafka-pipeline-connector." + tableName + ".Envelope";
+        String beforeAfterName = "kafka-pipeline-connector." + tableName + ".Value";
+        SchemaBuilder schemaBuilder = SchemaBuilder.struct().name(schemaDescribes);
+        SchemaBuilder beforeBuilder = SchemaBuilder.struct().name(beforeAfterName);
+        SchemaBuilder afterBuilder = SchemaBuilder.struct().name(beforeAfterName);
+        for (Column column : columns) {
+            String columnName = column.getName();
+            org.apache.flink.cdc.common.types.DataType columnType = column.getType();
+            final SchemaBuilder field;
+            switch (columnType.getTypeRoot()) {
+                case TINYINT:
+                case SMALLINT:
+                    field = SchemaBuilder.int16();
+                    break;
+                case INTEGER:
+                    field = SchemaBuilder.int32();
+                    break;
+                case BIGINT:
+                    field = SchemaBuilder.int64();
+                    break;
+                case DECIMAL:
+                    final int decimalPrecision = ((DecimalType) columnType).getPrecision();
+                    final int decimalScale = ((DecimalType) columnType).getScale();
+                    field =
+                            Decimal.builder(decimalScale)
+                                    .parameter(
+                                            "connect.decimal.precision",
+                                            String.valueOf(decimalPrecision));
+                    break;
+                case BOOLEAN:
+                    field = SchemaBuilder.bool();
+                    break;
+                case FLOAT:
+                case DOUBLE:
+                    field = SchemaBuilder.float64();
+                    break;
+                case DATE:
+                    field = SchemaBuilder.int32().name(Date.SCHEMA_NAME).version(1);
+                    break;
+                case TIME_WITHOUT_TIME_ZONE:
+                    field = SchemaBuilder.int64().name(MicroTime.SCHEMA_NAME).version(1);
+                    break;
+                case TIMESTAMP_WITHOUT_TIME_ZONE:
+                case TIMESTAMP_WITH_TIME_ZONE:
+                    field = SchemaBuilder.string().name(Timestamp.SCHEMA_NAME).version(1);
+                    break;
+                case BINARY:
+                    field =
+                            SchemaBuilder.bytes()
+                                    .name(Bits.LOGICAL_NAME)
+                                    .parameter(
+                                            Bits.LENGTH_FIELD,
+                                            Integer.toString(
+                                                    org.apache.flink.cdc.common.types.DataTypes
+                                                            .getLength(columnType)
+                                                            .orElse(0)))
+                                    .version(1);
+                    break;
+                case CHAR:
+                case VARCHAR:
+                default:
+                    field = SchemaBuilder.string();
+            }
+            if (columnType.isNullable()) {
+                field.optional();
+            } else {
+                field.required();
+            }
+            beforeBuilder.field(columnName, field);
+            afterBuilder.field(columnName, field);
+        }
+        schemaBuilder.field("before", beforeBuilder);
+        schemaBuilder.field("after", afterBuilder);
+        schemaBuilder.build();
+        return jsonConverter.asJsonSchema(schemaBuilder);
+    }
+
+    private void convertInsertEventToRowData(
+            DataChangeEvent dataChangeEvent, GenericRowData genericRowData) {
+        genericRowData.setField(BEFORE.getPosition(), null);
+        genericRowData.setField(
+                AFTER.getPosition(),
+                jsonSerializers
+                        .get(dataChangeEvent.tableId())
+                        .getRowDataFromRecordData(dataChangeEvent.after(), false));
+        genericRowData.setField(OPERATION.getPosition(), OP_INSERT);
+        genericRowData.setField(
+                SOURCE.getPosition(),
+                GenericRowData.of(
+                        StringData.fromString(dataChangeEvent.tableId().getSchemaName()),
+                        StringData.fromString(dataChangeEvent.tableId().getTableName())));
+    }
+
+    private void convertDeleteEventToRowData(
+            DataChangeEvent dataChangeEvent, GenericRowData genericRowData) {
+        genericRowData.setField(
+                BEFORE.getPosition(),
+                jsonSerializers
+                        .get(dataChangeEvent.tableId())
+                        .getRowDataFromRecordData(dataChangeEvent.before(), false));
+        genericRowData.setField(AFTER.getPosition(), null);
+        genericRowData.setField(OPERATION.getPosition(), OP_DELETE);
+        genericRowData.setField(
+                SOURCE.getPosition(),
+                GenericRowData.of(
+                        StringData.fromString(dataChangeEvent.tableId().getSchemaName()),
+                        StringData.fromString(dataChangeEvent.tableId().getTableName())));
+    }
+
+    private void convertUpdateEventToRowData(
+            DataChangeEvent dataChangeEvent, GenericRowData genericRowData) {
+        genericRowData.setField(
+                BEFORE.getPosition(),
+                jsonSerializers
+                        .get(dataChangeEvent.tableId())
+                        .getRowDataFromRecordData(dataChangeEvent.before(), false));
+        genericRowData.setField(
+                AFTER.getPosition(),
+                jsonSerializers
+                        .get(dataChangeEvent.tableId())
+                        .getRowDataFromRecordData(dataChangeEvent.after(), false));
+        genericRowData.setField(OPERATION.getPosition(), OP_UPDATE);
+        genericRowData.setField(
+                SOURCE.getPosition(),
+                GenericRowData.of(
+                        StringData.fromString(dataChangeEvent.tableId().getSchemaName()),
+                        StringData.fromString(dataChangeEvent.tableId().getTableName())));
     }
 
     /**
@@ -203,16 +352,22 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
      * docs</a> for more details.
      */
     private static RowType createJsonRowType(DataType databaseSchema) {
+        DataType payloadRowType =
+                DataTypes.ROW(
+                        DataTypes.FIELD(BEFORE.getFieldName(), databaseSchema),
+                        DataTypes.FIELD(AFTER.getFieldName(), databaseSchema),
+                        DataTypes.FIELD(OPERATION.getFieldName(), DataTypes.STRING()),
+                        DataTypes.FIELD(
+                                SOURCE.getFieldName(),
+                                DataTypes.ROW(
+                                        DataTypes.FIELD(
+                                                DATABASE.getFieldName(), DataTypes.STRING()),
+                                        DataTypes.FIELD(
+                                                TABLE.getFieldName(), DataTypes.STRING()))));
         return (RowType)
                 DataTypes.ROW(
-                                DataTypes.FIELD("before", databaseSchema),
-                                DataTypes.FIELD("after", databaseSchema),
-                                DataTypes.FIELD("op", DataTypes.STRING()),
-                                DataTypes.FIELD(
-                                        "source",
-                                        DataTypes.ROW(
-                                                DataTypes.FIELD("db", DataTypes.STRING()),
-                                                DataTypes.FIELD("table", DataTypes.STRING()))))
+                                DataTypes.FIELD(SCHEMA.getFieldName(), DataTypes.STRING()),
+                                DataTypes.FIELD(PAYLOAD.getFieldName(), payloadRowType))
                         .getLogicalType();
     }
 }
