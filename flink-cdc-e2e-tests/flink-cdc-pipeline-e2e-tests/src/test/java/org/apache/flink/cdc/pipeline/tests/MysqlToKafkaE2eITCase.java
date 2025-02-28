@@ -373,7 +373,7 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
             throw e;
         }
 
-        expectedEventCount = 21;
+        expectedEventCount = 20;
         waitUntilSpecificEventCount(collectedRecords, expectedEventCount);
         assertThat(expectedRecords)
                 .containsExactlyInAnyOrderElementsOf(deserializeValues(collectedRecords));

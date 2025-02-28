@@ -282,6 +282,7 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
                     break;
                 case CHAR:
                 case VARCHAR:
+                case VARBINARY:
                 default:
                     field = SchemaBuilder.string();
             }
