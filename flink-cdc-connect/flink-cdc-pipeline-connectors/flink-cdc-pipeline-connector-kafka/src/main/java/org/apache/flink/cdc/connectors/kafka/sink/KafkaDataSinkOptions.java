@@ -102,7 +102,7 @@ public class KafkaDataSinkOptions {
                                     .build());
 
     public static final ConfigOption<Boolean> SINK_DEBEZIUM_JSON_SCHEMA_ENABLED =
-            key("sink.debezium_json_schema.enabled")
+            key("sink.debezium-json-schema.enabled")
                     .booleanType()
                     .defaultValue(false)
                     .withDescription(

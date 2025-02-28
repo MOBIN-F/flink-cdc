@@ -322,6 +322,7 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                                 + "  type: kafka\n"
                                 + "  properties.bootstrap.servers: kafka:9092\n"
                                 + "  topic: %s\n"
+                                + "  sink.debezium-json-schema.enabled: true\n"
                                 + "\n"
                                 + "pipeline:\n"
                                 + "  parallelism: %d",
