@@ -285,8 +285,11 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
             } else {
                 field.required();
             }
-            beforeBuilder.field(columnName, field);
-            afterBuilder.field(columnName, field);
+            if (column.getDefaultValueExpression() != null) {
+                field.defaultValue(column.getDefaultValueExpression());
+            }
+            beforeBuilder.field(columnName, field).optional();
+            afterBuilder.field(columnName, field).optional();
         }
         schemaBuilder.field("before", beforeBuilder);
         schemaBuilder.field("after", afterBuilder);

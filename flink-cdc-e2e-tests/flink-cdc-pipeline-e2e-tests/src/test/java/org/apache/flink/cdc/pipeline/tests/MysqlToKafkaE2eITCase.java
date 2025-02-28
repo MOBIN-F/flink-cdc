@@ -317,7 +317,6 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
                                 + "  tables: %s.\\.*\n"
                                 + "  server-id: 5400-5404\n"
                                 + "  server-time-zone: UTC\n"
-                                + "  metadata.list: schema\n"
                                 + "\n"
                                 + "sink:\n"
                                 + "  type: kafka\n"
@@ -374,7 +373,7 @@ public class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
             throw e;
         }
 
-        expectedEventCount = 20;
+        expectedEventCount = 21;
         waitUntilSpecificEventCount(collectedRecords, expectedEventCount);
         assertThat(expectedRecords)
                 .containsExactlyInAnyOrderElementsOf(deserializeValues(collectedRecords));
