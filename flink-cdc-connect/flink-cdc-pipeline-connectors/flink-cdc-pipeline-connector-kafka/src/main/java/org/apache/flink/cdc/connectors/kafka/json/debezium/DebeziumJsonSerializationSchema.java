@@ -38,7 +38,6 @@ import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
 
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.debezium.data.Bits;
 import io.debezium.time.Date;
 import io.debezium.time.MicroTime;
@@ -98,11 +97,13 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
 
     private final boolean ignoreNullFields;
 
+    private final boolean isIncludedDebeziumSchema;
+
     private final ZoneId zoneId;
 
     private InitializationContext context;
 
-    private Map<TableId, ObjectNode> schemaMap = new HashMap<>();
+    private Map<TableId, String> schemaMap = new HashMap<>();
 
     JsonConverter jsonConverter;
 
@@ -112,7 +113,8 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
             String mapNullKeyLiteral,
             ZoneId zoneId,
             boolean encodeDecimalAsPlainNumber,
-            boolean ignoreNullFields) {
+            boolean ignoreNullFields,
+            boolean isIncludedDebeziumSchema) {
         this.timestampFormat = timestampFormat;
         this.mapNullKeyMode = mapNullKeyMode;
         this.mapNullKeyLiteral = mapNullKeyLiteral;
@@ -120,18 +122,24 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
         this.zoneId = zoneId;
         jsonSerializers = new HashMap<>();
         this.ignoreNullFields = ignoreNullFields;
+        this.isIncludedDebeziumSchema = isIncludedDebeziumSchema;
     }
 
     @Override
     public void open(InitializationContext context) {
-        reuseGenericRowData = new GenericRowData(2);
-        payloadGenericRowData = new GenericRowData(4);
-        reuseGenericRowData.setField(PAYLOAD.getPosition(), payloadGenericRowData);
+        if (isIncludedDebeziumSchema) {
+            reuseGenericRowData = new GenericRowData(2);
+            payloadGenericRowData = new GenericRowData(4);
+            reuseGenericRowData.setField(PAYLOAD.getPosition(), payloadGenericRowData);
+
+            this.jsonConverter = new JsonConverter();
+            final HashMap<String, Object> configs = new HashMap<>(2);
+            configs.put(ConverterConfig.TYPE_CONFIG, ConverterType.VALUE.getName());
+            jsonConverter.configure(configs);
+        } else {
+            reuseGenericRowData = new GenericRowData(4);
+        }
         this.context = context;
-        this.jsonConverter = new JsonConverter();
-        final HashMap<String, Object> configs = new HashMap<>(2);
-        configs.put(ConverterConfig.TYPE_CONFIG, ConverterType.VALUE.getName());
-        jsonConverter.configure(configs);
     }
 
     @Override
@@ -149,19 +157,21 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
                                 schemaChangeEvent);
             }
 
-            schemaMap.put(
-                    schemaChangeEvent.tableId(),
-                    convertSchemaToDebeziumSchema(schema, schemaChangeEvent.tableId().toString()));
+            if (isIncludedDebeziumSchema) {
+                schemaMap.put(schemaChangeEvent.tableId(), convertSchemaToDebeziumSchema(schema));
+            }
             LogicalType rowType =
                     DataTypeUtils.toFlinkDataType(schema.toRowDataType()).getLogicalType();
             DebeziumJsonRowDataSerializationSchema jsonSerializer =
                     new DebeziumJsonRowDataSerializationSchema(
-                            createJsonRowType(fromLogicalToDataType(rowType)),
+                            createJsonRowType(
+                                    fromLogicalToDataType(rowType), isIncludedDebeziumSchema),
                             timestampFormat,
                             mapNullKeyMode,
                             mapNullKeyLiteral,
                             encodeDecimalAsPlainNumber,
-                            ignoreNullFields);
+                            ignoreNullFields,
+                            isIncludedDebeziumSchema);
             try {
                 jsonSerializer.open(context);
             } catch (Exception e) {
@@ -194,15 +204,15 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
                                     "Unsupported operation '%s' for OperationType.",
                                     dataChangeEvent.op()));
             }
-            converter.accept(dataChangeEvent, payloadGenericRowData);
 
-            reuseGenericRowData.setField(
-                    SCHEMA.getPosition(),
-                    StringData.fromString(schemaMap.get(dataChangeEvent.tableId()).toString()));
-            //            String schemaStr = dataChangeEvent.meta().getOrDefault("schema", null);
-            //            reuseGenericRowData.setField(SCHEMA.getPosition(),
-            // StringData.fromString(schemaStr));
-
+            if (isIncludedDebeziumSchema) {
+                converter.accept(dataChangeEvent, payloadGenericRowData);
+                reuseGenericRowData.setField(
+                        SCHEMA.getPosition(),
+                        StringData.fromString(schemaMap.get(dataChangeEvent.tableId())));
+            } else {
+                converter.accept(dataChangeEvent, reuseGenericRowData);
+            }
             return jsonSerializers
                     .get(dataChangeEvent.tableId())
                     .getSerializationSchema()
@@ -212,16 +222,11 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
         }
     }
 
-    /** Convert CDC Schema to Debezium Schema. */
-    public ObjectNode convertSchemaToDebeziumSchema(Schema schema, String tableName) {
+    public String convertSchemaToDebeziumSchema(Schema schema) {
         List<Column> columns = schema.getColumns();
-        // schema names have the format connector-name.database-name.table-name:
-        // https://debezium.io/documentation/reference/3.1/connectors/mysql.html#mysql-change-event-keys
-        String schemaDescribes = "kafka-pipeline-connector." + tableName + ".Envelope";
-        String beforeAfterName = "kafka-pipeline-connector." + tableName + ".Value";
-        SchemaBuilder schemaBuilder = SchemaBuilder.struct().name(schemaDescribes);
-        SchemaBuilder beforeBuilder = SchemaBuilder.struct().name(beforeAfterName);
-        SchemaBuilder afterBuilder = SchemaBuilder.struct().name(beforeAfterName);
+        SchemaBuilder schemaBuilder = SchemaBuilder.struct();
+        SchemaBuilder beforeBuilder = SchemaBuilder.struct();
+        SchemaBuilder afterBuilder = SchemaBuilder.struct();
         for (Column column : columns) {
             String columnName = column.getName();
             org.apache.flink.cdc.common.types.DataType columnType = column.getType();
@@ -294,7 +299,7 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
         schemaBuilder.field("before", beforeBuilder);
         schemaBuilder.field("after", afterBuilder);
         schemaBuilder.build();
-        return jsonConverter.asJsonSchema(schemaBuilder);
+        return jsonConverter.asJsonSchema(schemaBuilder).toString();
     }
 
     private void convertInsertEventToRowData(
@@ -354,7 +359,8 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
      * href="https://debezium.io/documentation/reference/1.9/connectors/mysql.html">Debezium
      * docs</a> for more details.
      */
-    private static RowType createJsonRowType(DataType databaseSchema) {
+    private static RowType createJsonRowType(
+            DataType databaseSchema, boolean isIncludedDebeziumSchema) {
         DataType payloadRowType =
                 DataTypes.ROW(
                         DataTypes.FIELD(BEFORE.getFieldName(), databaseSchema),
@@ -367,10 +373,13 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
                                                 DATABASE.getFieldName(), DataTypes.STRING()),
                                         DataTypes.FIELD(
                                                 TABLE.getFieldName(), DataTypes.STRING()))));
-        return (RowType)
-                DataTypes.ROW(
-                                DataTypes.FIELD(SCHEMA.getFieldName(), DataTypes.STRING()),
-                                DataTypes.FIELD(PAYLOAD.getFieldName(), payloadRowType))
-                        .getLogicalType();
+        if (isIncludedDebeziumSchema) {
+            return (RowType)
+                    DataTypes.ROW(
+                                    DataTypes.FIELD(SCHEMA.getFieldName(), DataTypes.STRING()),
+                                    DataTypes.FIELD(PAYLOAD.getFieldName(), payloadRowType))
+                            .getLogicalType();
+        }
+        return (RowType) payloadRowType.getLogicalType();
     }
 }

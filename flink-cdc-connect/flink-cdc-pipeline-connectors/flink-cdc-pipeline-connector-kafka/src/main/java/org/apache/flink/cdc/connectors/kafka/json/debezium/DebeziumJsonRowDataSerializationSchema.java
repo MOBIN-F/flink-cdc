@@ -74,13 +74,16 @@ public class DebeziumJsonRowDataSerializationSchema implements SerializationSche
     /** Flag indicating whether to ignore null fields. */
     private final boolean ignoreNullFields;
 
+    private final boolean isIncludedDebeziumSchema;
+
     public DebeziumJsonRowDataSerializationSchema(
             RowType rowType,
             TimestampFormat timestampFormat,
             JsonFormatOptions.MapNullKeyMode mapNullKeyMode,
             String mapNullKeyLiteral,
             boolean encodeDecimalAsPlainNumber,
-            boolean ignoreNullFields) {
+            boolean ignoreNullFields,
+            boolean isIncludedDebeziumSchema) {
         this.rowType = rowType;
         this.timestampFormat = timestampFormat;
         this.mapNullKeyMode = mapNullKeyMode;
@@ -94,6 +97,7 @@ public class DebeziumJsonRowDataSerializationSchema implements SerializationSche
                                 ignoreNullFields)
                         .createConverter(rowType);
         this.ignoreNullFields = ignoreNullFields;
+        this.isIncludedDebeziumSchema = isIncludedDebeziumSchema;
     }
 
     @Override
@@ -113,11 +117,7 @@ public class DebeziumJsonRowDataSerializationSchema implements SerializationSche
 
         try {
             runtimeConverter.convert(mapper, node, row);
-            if (node.path("schema").isNull()) {
-                String payload = node.get("payload").toString();
-                JsonNode payloadNode = mapper.readTree(payload);
-                return mapper.writeValueAsBytes(payloadNode);
-            } else {
+            if (isIncludedDebeziumSchema) {
                 // schema is a nested json string, asText() can return a pure string without other
                 // escape characters such as "\"
                 String schemaValue = node.get("schema").asText();
@@ -125,6 +125,7 @@ public class DebeziumJsonRowDataSerializationSchema implements SerializationSche
                 node.set("schema", schemaNode);
                 return mapper.writeValueAsBytes(node);
             }
+            return mapper.writeValueAsBytes(node);
         } catch (Throwable t) {
             throw new RuntimeException(String.format("Could not serialize row '%s'.", row), t);
         }
