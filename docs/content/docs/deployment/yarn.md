@@ -150,4 +150,19 @@ Job Description: Sync MySQL Database to Doris
 
 You can find a job named `Sync MySQL Database to Doris` running through Flink Web UI.
 
-Please note that submitting to application mode cluster and per-job mode cluster are not supported for now.
+# Yarn Application Mode
+The Yarn Application mode is the recommended approach for running Flink jobs on a Yarn cluster. It offers more flexible resource management and allocation, enabling better utilization of cluster resources.
+
+To submit a job to a Flink Yarn Application cluster using the CLI:
+```bash
+cd /path/flink-cdc-*
+./bin/flink-cdc.sh -t yarn-application -Dexecution.checkpointing.interval=2s mysql-to-doris.yaml
+````
+After successful submission, the return information is as follows:
+```bash
+Pipeline has been submitted to cluster.
+Job ID: application_1728995081590_1254
+Job Description: submit job successful
+```
+You can find a application_id `application_1728995081590_1254` running through Yarn Web UI.
+
