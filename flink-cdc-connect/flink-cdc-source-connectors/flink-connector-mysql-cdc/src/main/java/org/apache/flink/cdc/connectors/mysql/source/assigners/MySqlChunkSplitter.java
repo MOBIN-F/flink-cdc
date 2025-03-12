@@ -360,9 +360,6 @@ public class MySqlChunkSplitter implements ChunkSplitter {
                 return null;
             }
         }
-        if (chunkEnd == null) {
-            return null;
-        }
         if (ObjectUtils.compare(chunkEnd, max) >= 0) {
             return null;
         } else {
