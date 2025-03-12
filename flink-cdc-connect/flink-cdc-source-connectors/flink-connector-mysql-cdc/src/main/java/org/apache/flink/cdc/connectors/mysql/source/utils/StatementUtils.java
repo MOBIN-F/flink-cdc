@@ -46,7 +46,6 @@ public class StatementUtils {
                         "SELECT MIN(%s), MAX(%s) FROM %s",
                         quote(columnName),
                         quote(columnName),
-                        quote(tableId),
                         filter != null ? quote(tableId) + " WHERE " + filter : quote(tableId));
         return jdbc.queryAndMap(
                 minMaxQuery,
@@ -119,7 +118,6 @@ public class StatementUtils {
                         "SELECT MIN(%s) FROM %s WHERE %s > ?",
                         quote(columnName),
                         quote(tableId),
-                        quote(columnName),
                         filter != null ? filter + " AND " + quote(columnName) : quote(columnName));
         return jdbc.prepareQueryAndMap(
                 minQuery,
