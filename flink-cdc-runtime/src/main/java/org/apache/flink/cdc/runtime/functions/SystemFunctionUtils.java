@@ -750,8 +750,24 @@ public class SystemFunctionUtils {
     }
 
     public static String castToString(Object object) {
+        return castToString(object, "UTC");
+    }
+
+    public static String castToString(Object object, String timezone) {
         if (object == null) {
             return null;
+        }
+        if (object instanceof LocalZonedTimestampData) {
+            return TimestampData.fromLocalDateTime(
+                            LocalDateTime.ofInstant(
+                                    ((LocalZonedTimestampData) object).toInstant(),
+                                    ZoneId.of(timezone)))
+                    .toString();
+        } else if (object instanceof ZonedTimestampData) {
+            return TimestampData.fromLocalDateTime(
+                            LocalDateTime.ofInstant(
+                                    ((ZonedTimestampData) object).toInstant(), ZoneId.of(timezone)))
+                    .toString();
         }
         return object.toString();
     }

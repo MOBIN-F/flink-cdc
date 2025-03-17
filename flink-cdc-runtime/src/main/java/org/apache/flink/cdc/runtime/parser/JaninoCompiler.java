@@ -556,7 +556,14 @@ public class JaninoCompiler {
             case "CHAR":
             case "VARCHAR":
             case "STRING":
-                return new Java.MethodInvocation(Location.NOWHERE, null, "castToString", atoms);
+                List<Java.Rvalue> timestampAtoms1 = new ArrayList<>(Arrays.asList(atoms));
+                timestampAtoms1.add(
+                        new Java.AmbiguousName(Location.NOWHERE, new String[] {DEFAULT_TIME_ZONE}));
+                return new Java.MethodInvocation(
+                        Location.NOWHERE,
+                        null,
+                        "castToString",
+                        timestampAtoms1.toArray(new Java.Rvalue[0]));
             case "TIMESTAMP":
                 List<Java.Rvalue> timestampAtoms = new ArrayList<>(Arrays.asList(atoms));
                 timestampAtoms.add(
