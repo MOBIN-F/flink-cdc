@@ -30,8 +30,15 @@ import org.apache.flink.cdc.common.event.TruncateTableEvent;
 import org.apache.flink.cdc.common.event.visitor.SchemaChangeEventVisitor;
 import org.apache.flink.cdc.common.exceptions.SchemaEvolveException;
 import org.apache.flink.cdc.common.exceptions.UnsupportedSchemaChangeEventException;
+import org.apache.flink.cdc.common.schema.Column;
 import org.apache.flink.cdc.common.schema.Schema;
 import org.apache.flink.cdc.common.sink.MetadataApplier;
+import org.apache.flink.cdc.common.types.DataType;
+import org.apache.flink.cdc.common.types.DataTypes;
+import org.apache.flink.cdc.common.types.TimestampType;
+import org.apache.flink.cdc.common.types.DataType;
+import org.apache.flink.cdc.common.types.DataTypes;
+import org.apache.flink.cdc.common.types.TimestampType;
 import org.apache.flink.cdc.common.types.utils.DataTypeUtils;
 
 import org.apache.flink.shaded.guava31.com.google.common.collect.Sets;
@@ -53,6 +60,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.apache.flink.cdc.common.types.DataTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
+import static org.apache.flink.cdc.common.types.DataTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
 import static org.apache.flink.cdc.common.utils.Preconditions.checkArgument;
 import static org.apache.flink.cdc.common.utils.Preconditions.checkNotNull;
 
@@ -76,21 +85,26 @@ public class PaimonMetadataApplier implements MetadataApplier {
 
     private Set<SchemaChangeEventType> enabledSchemaEvolutionTypes;
 
-    public PaimonMetadataApplier(Options catalogOptions) {
+    private boolean timeStampLtzToTimeStamp;
+
+    public PaimonMetadataApplier(Options catalogOptions, boolean timeStampLtzToTimeStamp) {
         this.catalogOptions = catalogOptions;
         this.tableOptions = new HashMap<>();
         this.partitionMaps = new HashMap<>();
         this.enabledSchemaEvolutionTypes = getSupportedSchemaEvolutionTypes();
+        this.timeStampLtzToTimeStamp = timeStampLtzToTimeStamp;
     }
 
     public PaimonMetadataApplier(
             Options catalogOptions,
             Map<String, String> tableOptions,
-            Map<TableId, List<String>> partitionMaps) {
+            Map<TableId, List<String>> partitionMaps,
+            boolean timeStampLtzToTimeStamp) {
         this.catalogOptions = catalogOptions;
         this.tableOptions = tableOptions;
         this.partitionMaps = partitionMaps;
         this.enabledSchemaEvolutionTypes = getSupportedSchemaEvolutionTypes();
+        this.timeStampLtzToTimeStamp = timeStampLtzToTimeStamp;
     }
 
     @Override
@@ -170,13 +184,22 @@ public class PaimonMetadataApplier implements MetadataApplier {
                     new org.apache.paimon.schema.Schema.Builder();
             schema.getColumns()
                     .forEach(
-                            (column) ->
-                                    builder.column(
-                                            column.getName(),
-                                            LogicalTypeConversion.toDataType(
-                                                    DataTypeUtils.toFlinkDataType(column.getType())
-                                                            .getLogicalType()),
-                                            column.getComment()));
+                            (column) ->{
+                                DataType dataType;
+                                if (column.getType().getTypeRoot() == TIMESTAMP_WITH_LOCAL_TIME_ZONE
+                                        && timeStampLtzToTimeStamp) {
+                                    dataType = DataTypes.TIMESTAMP(TimestampType.DEFAULT_PRECISION);
+                                } else {
+                                    dataType = column.getType();
+                                }
+                                builder.column(
+                                        column.getName(),
+                                        LogicalTypeConversion.toDataType(
+                                                DataTypeUtils.toFlinkDataType(dataType)
+                                                        .getLogicalType()),
+                                        column.getComment());
+                            }
+                                    );
             List<String> partitionKeys = new ArrayList<>();
             List<String> primaryKeys = schema.primaryKeys();
             if (partitionMaps.containsKey(event.tableId())) {
@@ -222,6 +245,16 @@ public class PaimonMetadataApplier implements MetadataApplier {
         try {
             List<SchemaChange> tableChangeList = new ArrayList<>();
             for (AddColumnEvent.ColumnWithPosition columnWithPosition : event.getAddedColumns()) {
+                if (columnWithPosition.getAddColumn().getType().getTypeRoot()
+                                == TIMESTAMP_WITH_LOCAL_TIME_ZONE
+                        && timeStampLtzToTimeStamp) {
+                    columnWithPosition =
+                            new AddColumnEvent.ColumnWithPosition(
+                                    Column.physicalColumn(
+                                            columnWithPosition.getAddColumn().getName(),
+                                            DataTypes.TIMESTAMP(TimestampType.DEFAULT_PRECISION),
+                                            columnWithPosition.getExistedColumnName()));
+                }
                 switch (columnWithPosition.getPosition()) {
                     case FIRST:
                         tableChangeList.addAll(

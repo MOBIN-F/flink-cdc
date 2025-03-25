@@ -38,14 +38,19 @@ public class PaimonHashFunctionProvider implements HashFunctionProvider<DataChan
 
     private final int parallelism;
 
-    public PaimonHashFunctionProvider(Options options, ZoneId zoneId, int parallelism) {
+    private boolean timeStampLtzToTimeStamp;
+
+    public PaimonHashFunctionProvider(
+            Options options, ZoneId zoneId, int parallelism, boolean timeStampLtzToTimeStamp) {
         this.options = options;
         this.zoneId = zoneId;
         this.parallelism = parallelism;
+        this.timeStampLtzToTimeStamp = timeStampLtzToTimeStamp;
     }
 
     @Override
     public HashFunction<DataChangeEvent> getHashFunction(@Nullable TableId tableId, Schema schema) {
-        return new PaimonHashFunction(options, tableId, schema, zoneId, parallelism);
+        return new PaimonHashFunction(
+                options, tableId, schema, zoneId, parallelism, timeStampLtzToTimeStamp);
     }
 }

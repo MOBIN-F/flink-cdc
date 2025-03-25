@@ -47,9 +47,12 @@ public class PaimonRecordEventSerializer implements PaimonRecordSerializer<Event
     // ZoneId for converting relevant type.
     private final ZoneId zoneId;
 
-    public PaimonRecordEventSerializer(ZoneId zoneId) {
+    private final boolean timeStampLtzToTimeStamp;
+
+    public PaimonRecordEventSerializer(ZoneId zoneId, boolean timeStampLtzToTimeStamp) {
         schemaMaps = new HashMap<>();
         this.zoneId = zoneId;
+        this.timeStampLtzToTimeStamp = timeStampLtzToTimeStamp;
     }
 
     @Override
@@ -65,7 +68,8 @@ public class PaimonRecordEventSerializer implements PaimonRecordSerializer<Event
                 CreateTableEvent createTableEvent = (CreateTableEvent) event;
                 schemaMaps.put(
                         createTableEvent.tableId(),
-                        new TableSchemaInfo(createTableEvent.getSchema(), zoneId));
+                        new TableSchemaInfo(
+                                createTableEvent.getSchema(), zoneId, timeStampLtzToTimeStamp));
             } else {
                 SchemaChangeEvent schemaChangeEvent = (SchemaChangeEvent) event;
                 Schema schema = schemaMaps.get(schemaChangeEvent.tableId()).getSchema();
@@ -74,7 +78,8 @@ public class PaimonRecordEventSerializer implements PaimonRecordSerializer<Event
                             schemaChangeEvent.tableId(),
                             new TableSchemaInfo(
                                     SchemaUtils.applySchemaChangeEvent(schema, schemaChangeEvent),
-                                    zoneId));
+                                    zoneId,
+                                    timeStampLtzToTimeStamp));
                 }
             }
             return new PaimonEvent(tableId, null, true);

@@ -122,7 +122,7 @@ class PaimonWriterHelperTest {
         BinaryRecordData recordData = new BinaryRecordDataGenerator(rowType).generate(testData);
         Schema schema = Schema.newBuilder().fromRowDataType(rowType).build();
         List<RecordData.FieldGetter> fieldGetters =
-                PaimonWriterHelper.createFieldGetters(schema, ZoneId.of("UTC+8"));
+                PaimonWriterHelper.createFieldGetters(schema, ZoneId.of("Asia/Shanghai"), true);
         DataChangeEvent dataChangeEvent =
                 DataChangeEvent.insertEvent(TableId.parse("database.table"), recordData);
         GenericRow genericRow =
@@ -165,7 +165,7 @@ class PaimonWriterHelperTest {
                         .physicalColumn("col2", DataTypes.STRING())
                         .build();
         List<RecordData.FieldGetter> fieldGetters =
-                PaimonWriterHelper.createFieldGetters(schema, ZoneId.systemDefault());
+                PaimonWriterHelper.createFieldGetters(schema, ZoneId.systemDefault(), false);
         TableId tableId = TableId.parse("database.table");
         BinaryRecordDataGenerator generator =
                 new BinaryRecordDataGenerator(RowType.of(DataTypes.STRING(), DataTypes.STRING()));
@@ -231,7 +231,7 @@ class PaimonWriterHelperTest {
         // Create schema and field getters
         Schema schema = Schema.newBuilder().fromRowDataType(rowType).build();
         List<RecordData.FieldGetter> fieldGetters =
-                PaimonWriterHelper.createFieldGetters(schema, ZoneId.of("UTC+8"));
+                PaimonWriterHelper.createFieldGetters(schema, ZoneId.of("UTC+8"), false);
 
         // Create a data change event
         DataChangeEvent dataChangeEvent =

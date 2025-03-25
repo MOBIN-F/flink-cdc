@@ -53,7 +53,8 @@ public class PaimonHashFunction implements HashFunction<DataChangeEvent>, Serial
     private final int parallelism;
 
     public PaimonHashFunction(
-            Options options, TableId tableId, Schema schema, ZoneId zoneId, int parallelism) {
+            Options options, TableId tableId, Schema schema, ZoneId zoneId, int parallelism,
+            boolean timeStampLtzToTimeStamp) {
         this.parallelism = parallelism;
         Catalog catalog = FlinkCatalogFactory.createPaimonCatalog(options);
         FileStoreTable table;
@@ -66,7 +67,7 @@ public class PaimonHashFunction implements HashFunction<DataChangeEvent>, Serial
             this.fieldGetters = null;
             channelComputer = null;
         } else {
-            this.fieldGetters = PaimonWriterHelper.createFieldGetters(schema, zoneId);
+            this.fieldGetters = PaimonWriterHelper.createFieldGetters(schema, zoneId, timeStampLtzToTimeStamp);
             channelComputer = new RowAssignerChannelComputer(table.schema(), parallelism);
             channelComputer.setup(parallelism);
         }

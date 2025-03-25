@@ -32,9 +32,9 @@ public class TableSchemaInfo {
 
     private final boolean hasPrimaryKey;
 
-    public TableSchemaInfo(Schema schema, ZoneId zoneId) {
+    public TableSchemaInfo(Schema schema, ZoneId zoneId, boolean timeStampLtzToTimeStamp) {
         this.schema = schema;
-        this.fieldGetters = PaimonWriterHelper.createFieldGetters(schema, zoneId);
+        this.fieldGetters = PaimonWriterHelper.createFieldGetters(schema, zoneId, timeStampLtzToTimeStamp);
         this.hasPrimaryKey = !schema.primaryKeys().isEmpty();
     }
 

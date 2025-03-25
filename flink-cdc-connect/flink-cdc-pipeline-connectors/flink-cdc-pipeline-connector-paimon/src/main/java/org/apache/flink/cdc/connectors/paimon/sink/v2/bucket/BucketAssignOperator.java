@@ -94,13 +94,20 @@ public class BucketAssignOperator extends AbstractStreamOperator<Event>
 
     protected SchemaDerivator schemaDerivator;
 
+    private final boolean timeStampLtzToTimeStamp;
+
     public BucketAssignOperator(
-            Options catalogOptions, String schemaOperatorUid, ZoneId zoneId, String commitUser) {
+            Options catalogOptions,
+            String schemaOperatorUid,
+            ZoneId zoneId,
+            String commitUser,
+            boolean timeStampLtzToTimeStamp) {
         this.catalogOptions = catalogOptions;
         this.chainingStrategy = ChainingStrategy.ALWAYS;
         this.schemaOperatorUid = schemaOperatorUid;
         this.commitUser = commitUser;
         this.zoneId = zoneId;
+        this.timeStampLtzToTimeStamp = timeStampLtzToTimeStamp;
     }
 
     @Override
@@ -153,6 +160,24 @@ public class BucketAssignOperator extends AbstractStreamOperator<Event>
             }
         } else if (event instanceof DataChangeEvent) {
             DataChangeEvent dataChangeEvent = convertDataChangeEvent((DataChangeEvent) event);
+            return;
+        }
+
+        if (event instanceof DataChangeEvent) {
+            DataChangeEvent dataChangeEvent = (DataChangeEvent) event;
+            if (!schemaMaps.containsKey(dataChangeEvent.tableId())) {
+                Optional<Schema> schema =
+                        schemaEvolutionClient.getLatestEvolvedSchema(dataChangeEvent.tableId());
+                if (schema.isPresent()) {
+                    schemaMaps.put(
+                            dataChangeEvent.tableId(),
+                            new TableSchemaInfo(schema.get(), zoneId, timeStampLtzToTimeStamp));
+                } else {
+                    throw new RuntimeException(
+                            "Could not find schema message from SchemaRegistry for "
+                                    + dataChangeEvent.tableId());
+                }
+            }
             Tuple4<BucketMode, RowKeyExtractor, BucketAssigner, RowPartitionKeyExtractor> tuple4 =
                     bucketAssignerMap.computeIfAbsent(
                             dataChangeEvent.tableId(), this::getTableInfo);
@@ -193,6 +218,18 @@ public class BucketAssignOperator extends AbstractStreamOperator<Event>
             output.collect(
                     new StreamRecord<>(new BucketWrapperChangeEvent(bucket, dataChangeEvent)));
         } else {
+                    new StreamRecord<>(new BucketWrapperChangeEvent(bucket, (ChangeEvent) event));
+        } else if (event instanceof SchemaChangeEvent) {
+            SchemaChangeEvent schemaChangeEvent = (SchemaChangeEvent) event;
+            Schema schema =
+                    SchemaUtils.applySchemaChangeEvent(
+                            Optional.ofNullable(schemaMaps.get(schemaChangeEvent.tableId()))
+                                    .map(TableSchemaInfo::getSchema)
+                                    .orElse(null),
+                            schemaChangeEvent);
+            schemaMaps.put(
+                    schemaChangeEvent.tableId(),
+                    new TableSchemaInfo(schema, zoneId, timeStampLtzToTimeStamp));
             // Broadcast SchemachangeEvent.
             for (int index = 0; index < totalTasksNumber; index++) {
                 output.collect(
