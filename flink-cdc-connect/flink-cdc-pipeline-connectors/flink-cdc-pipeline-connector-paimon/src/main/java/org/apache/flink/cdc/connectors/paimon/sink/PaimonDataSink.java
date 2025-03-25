@@ -53,6 +53,7 @@ public class PaimonDataSink implements DataSink, Serializable {
     private final ZoneId zoneId;
 
     public final String schemaOperatorUid;
+    public final boolean timeStampLtzToTimeStamp;
 
     public PaimonDataSink(
             Options options,
@@ -61,7 +62,8 @@ public class PaimonDataSink implements DataSink, Serializable {
             Map<TableId, List<String>> partitionMaps,
             PaimonRecordSerializer<Event> serializer,
             ZoneId zoneId,
-            String schemaOperatorUid) {
+            String schemaOperatorUid,
+            boolean timeStampLtzToTimeStamp) {
         this.options = options;
         this.tableOptions = tableOptions;
         this.commitUser = commitUser;
@@ -69,22 +71,31 @@ public class PaimonDataSink implements DataSink, Serializable {
         this.serializer = serializer;
         this.zoneId = zoneId;
         this.schemaOperatorUid = schemaOperatorUid;
+        this.timeStampLtzToTimeStamp = timeStampLtzToTimeStamp;
     }
 
     @Override
     public EventSinkProvider getEventSinkProvider() {
         return FlinkSinkProvider.of(
-                new PaimonEventSink(options, commitUser, serializer, schemaOperatorUid, zoneId));
+                new PaimonEventSink(
+                        options,
+                        commitUser,
+                        serializer,
+                        schemaOperatorUid,
+                        zoneId,
+                        timeStampLtzToTimeStamp));
     }
 
     @Override
     public MetadataApplier getMetadataApplier() {
-        return new PaimonMetadataApplier(options, tableOptions, partitionMaps);
+        return new PaimonMetadataApplier(
+                options, tableOptions, partitionMaps, timeStampLtzToTimeStamp);
     }
 
     @Override
     public HashFunctionProvider<DataChangeEvent> getDataChangeEventHashFunctionProvider(
             int parallelism) {
-        return new PaimonHashFunctionProvider(options, zoneId, parallelism);
+        return new PaimonHashFunctionProvider(
+                options, zoneId, parallelism, timeStampLtzToTimeStamp);
     }
 }

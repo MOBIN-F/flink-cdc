@@ -49,7 +49,12 @@ public class PaimonHashFunction implements HashFunction<DataChangeEvent>, Serial
     private final RowAssignerChannelComputer channelComputer;
 
     public PaimonHashFunction(
-            Options options, TableId tableId, Schema schema, ZoneId zoneId, int parallelism) {
+            Options options,
+            TableId tableId,
+            Schema schema,
+            ZoneId zoneId,
+            int parallelism,
+            boolean timeStampLtzToTimeStamp) {
         Catalog catalog = FlinkCatalogFactory.createPaimonCatalog(options);
         FileStoreTable table;
         try {
@@ -57,7 +62,8 @@ public class PaimonHashFunction implements HashFunction<DataChangeEvent>, Serial
         } catch (Catalog.TableNotExistException e) {
             throw new RuntimeException(e);
         }
-        this.fieldGetters = PaimonWriterHelper.createFieldGetters(schema, zoneId);
+        this.fieldGetters =
+                PaimonWriterHelper.createFieldGetters(schema, zoneId, timeStampLtzToTimeStamp);
         channelComputer = new RowAssignerChannelComputer(table.schema(), parallelism);
         channelComputer.setup(parallelism);
     }

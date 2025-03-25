@@ -926,6 +926,15 @@ class SchemaMergingUtilsTest {
     }
 
     @Test
+    void testCoerceArray() {
+        coerceRow(
+                "UTC",
+                of("id", BIGINT, "number", DOUBLE),
+                of("id", BIGINT, "number", DOUBLE),
+                Arrays.asList(6L, null));
+    }
+
+    @Test
     void testGetLeastCommonType() {
         // To-be-merged types are:
         // STRING, CHAR, VARCHAR, BINARY, VARBINARY, TINYINT, SMALLINT, INT, BIGINT,

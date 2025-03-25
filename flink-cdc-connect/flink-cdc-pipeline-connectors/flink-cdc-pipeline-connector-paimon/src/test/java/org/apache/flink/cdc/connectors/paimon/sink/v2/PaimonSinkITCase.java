@@ -159,7 +159,7 @@ public class PaimonSinkITCase {
                         .build();
         CreateTableEvent createTableEvent = new CreateTableEvent(table1, schema);
         testEvents.add(createTableEvent);
-        PaimonMetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions);
+        PaimonMetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions, false);
         metadataApplier.applySchemaChange(createTableEvent);
 
         // insert
@@ -180,7 +180,8 @@ public class PaimonSinkITCase {
         initialize(metastore);
         PaimonSink<Event> paimonSink =
                 new PaimonSink<>(
-                        catalogOptions, new PaimonRecordEventSerializer(ZoneId.systemDefault()));
+                        catalogOptions,
+                        new PaimonRecordEventSerializer(ZoneId.systemDefault(), false));
         PaimonWriter<Event> writer = paimonSink.createWriter(new MockInitContext());
         Committer<MultiTableCommittable> committer = paimonSink.createCommitter();
 
@@ -233,7 +234,8 @@ public class PaimonSinkITCase {
         initialize(metastore);
         PaimonSink<Event> paimonSink =
                 new PaimonSink<>(
-                        catalogOptions, new PaimonRecordEventSerializer(ZoneId.systemDefault()));
+                        catalogOptions,
+                        new PaimonRecordEventSerializer(ZoneId.systemDefault(), false));
         PaimonWriter<Event> writer = paimonSink.createWriter(new MockInitContext());
         Committer<MultiTableCommittable> committer = paimonSink.createCommitter();
 
@@ -256,7 +258,7 @@ public class PaimonSinkITCase {
                 new AddColumnEvent.ColumnWithPosition(Column.physicalColumn("col3", STRING()));
         AddColumnEvent addColumnEvent =
                 new AddColumnEvent(table1, Collections.singletonList(columnWithPosition));
-        PaimonMetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions);
+        PaimonMetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions, false);
         metadataApplier.applySchemaChange(addColumnEvent);
         writer.write(addColumnEvent, null);
 
@@ -342,7 +344,8 @@ public class PaimonSinkITCase {
         initialize(metastore);
         PaimonSink<Event> paimonSink =
                 new PaimonSink<>(
-                        catalogOptions, new PaimonRecordEventSerializer(ZoneId.systemDefault()));
+                        catalogOptions,
+                        new PaimonRecordEventSerializer(ZoneId.systemDefault(), false));
         PaimonWriter<Event> writer = paimonSink.createWriter(new MockInitContext());
         Committer<MultiTableCommittable> committer = paimonSink.createCommitter();
         List<Event> testEvents = createTestEvents(enableDeleteVector);
@@ -356,7 +359,7 @@ public class PaimonSinkITCase {
                         .build();
         CreateTableEvent createTableEvent = new CreateTableEvent(table2, schema);
         testEvents.add(createTableEvent);
-        PaimonMetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions);
+        PaimonMetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions, false);
         metadataApplier.applySchemaChange(createTableEvent);
         // insert
         testEvents.add(
@@ -452,7 +455,8 @@ public class PaimonSinkITCase {
         initialize(metastore);
         PaimonSink<Event> paimonSink =
                 new PaimonSink<>(
-                        catalogOptions, new PaimonRecordEventSerializer(ZoneId.systemDefault()));
+                        catalogOptions,
+                        new PaimonRecordEventSerializer(ZoneId.systemDefault(), false));
         PaimonWriter<Event> writer = paimonSink.createWriter(new MockInitContext());
         Committer<MultiTableCommittable> committer = paimonSink.createCommitter();
 

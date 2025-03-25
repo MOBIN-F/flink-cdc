@@ -42,6 +42,7 @@ import org.apache.paimon.memory.MemorySegmentUtils;
 import org.apache.paimon.types.RowKind;
 
 import java.nio.ByteBuffer;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,17 +53,20 @@ import static org.apache.flink.cdc.common.types.DataTypeChecks.getFieldCount;
 public class PaimonWriterHelper {
 
     /** create a list of {@link RecordData.FieldGetter} for {@link PaimonWriter}. */
-    public static List<RecordData.FieldGetter> createFieldGetters(Schema schema, ZoneId zoneId) {
+    public static List<RecordData.FieldGetter> createFieldGetters(
+            Schema schema, ZoneId zoneId, boolean timeStampLtzToTimeStamp) {
         List<Column> columns = schema.getColumns();
         List<RecordData.FieldGetter> fieldGetters = new ArrayList<>(columns.size());
         for (int i = 0; i < columns.size(); i++) {
-            fieldGetters.add(createFieldGetter(columns.get(i).getType(), i, zoneId));
+            fieldGetters.add(
+                    createFieldGetter(
+                            columns.get(i).getType(), i, zoneId, timeStampLtzToTimeStamp));
         }
         return fieldGetters;
     }
 
     private static RecordData.FieldGetter createFieldGetter(
-            DataType fieldType, int fieldPos, ZoneId zoneId) {
+            DataType fieldType, int fieldPos, ZoneId zoneId, boolean timeStampLtzToTimeStamp) {
         final RecordData.FieldGetter fieldGetter;
         // ordered by type root definition
         switch (fieldType.getTypeRoot()) {
@@ -119,13 +123,26 @@ public class PaimonWriterHelper {
                 break;
             case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
             case TIMESTAMP_WITH_TIME_ZONE:
-                fieldGetter =
-                        row ->
-                                Timestamp.fromInstant(
-                                        row.getLocalZonedTimestampData(
-                                                        fieldPos,
-                                                        DataTypeChecks.getPrecision(fieldType))
-                                                .toInstant());
+                if (timeStampLtzToTimeStamp) {
+                    fieldGetter =
+                            row ->
+                                    Timestamp.fromLocalDateTime(
+                                            LocalDateTime.ofInstant(
+                                                    row.getLocalZonedTimestampData(
+                                                                    fieldPos,
+                                                                    DataTypeChecks.getPrecision(
+                                                                            fieldType))
+                                                            .toInstant(),
+                                                    zoneId));
+                } else {
+                    fieldGetter =
+                            row ->
+                                    Timestamp.fromInstant(
+                                            row.getLocalZonedTimestampData(
+                                                            fieldPos,
+                                                            DataTypeChecks.getPrecision(fieldType))
+                                                    .toInstant());
+                }
                 break;
             case ROW:
                 final int rowFieldCount = getFieldCount(fieldType);

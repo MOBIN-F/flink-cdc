@@ -267,7 +267,7 @@ public class SchemaMergingUtils {
         List<Column> currentColumns = currentSchema.getColumns();
         Map<String, DataType> upcomingColumnTypes =
                 upcomingSchema.getColumns().stream()
-                        .collect(Collectors.toMap(Column::getName, Column::getType));
+                        .collect(Collectors.toMap(Column::getName, Column::getType, (v1, v2) -> v1));
         Map<String, Object> upcomingColumnObjects =
                 Streams.zip(
                                 upcomingSchema.getColumnNames().stream(),

@@ -40,15 +40,19 @@ public class PaimonEventSink extends PaimonSink<Event> implements WithPreWriteTo
 
     public final ZoneId zoneId;
 
+    public final boolean timeStampLtzToTimeStamp;
+
     public PaimonEventSink(
             Options catalogOptions,
             String commitUser,
             PaimonRecordSerializer<Event> serializer,
             String schemaOperatorUid,
-            ZoneId zoneId) {
+            ZoneId zoneId,
+            boolean timeStampLtzToTimeStamp) {
         super(catalogOptions, commitUser, serializer);
         this.schemaOperatorUid = schemaOperatorUid;
         this.zoneId = zoneId;
+        this.timeStampLtzToTimeStamp = timeStampLtzToTimeStamp;
     }
 
     @Override
@@ -59,7 +63,11 @@ public class PaimonEventSink extends PaimonSink<Event> implements WithPreWriteTo
                         "BucketAssign",
                         new BucketWrapperEventTypeInfo(),
                         new BucketAssignOperator(
-                                catalogOptions, schemaOperatorUid, zoneId, commitUser))
+                                catalogOptions,
+                                schemaOperatorUid,
+                                zoneId,
+                                commitUser,
+                                timeStampLtzToTimeStamp))
                 .name("Assign Bucket")
                 // All Events after BucketAssignOperator are decorated with BucketWrapper.
                 .partitionCustom(

@@ -77,7 +77,7 @@ public class PaimonHashFunctionTest {
         Map<String, String> tableOptions = new HashMap<>();
         tableOptions.put("bucket", "10");
         MetadataApplier metadataApplier =
-                new PaimonMetadataApplier(catalogOptions, tableOptions, new HashMap<>());
+                new PaimonMetadataApplier(catalogOptions, tableOptions, new HashMap<>(), false);
         Schema schema =
                 Schema.newBuilder()
                         .physicalColumn("col1", DataTypes.STRING().notNull())
@@ -91,7 +91,8 @@ public class PaimonHashFunctionTest {
         BinaryRecordDataGenerator generator =
                 new BinaryRecordDataGenerator(schema.getColumnDataTypes().toArray(new DataType[0]));
         PaimonHashFunction hashFunction =
-                new PaimonHashFunction(catalogOptions, tableId, schema, ZoneId.systemDefault(), 4);
+                new PaimonHashFunction(
+                        catalogOptions, tableId, schema, ZoneId.systemDefault(), 4, false);
         DataChangeEvent dataChangeEvent1 =
                 DataChangeEvent.insertEvent(
                         tableId,

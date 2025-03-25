@@ -88,13 +88,20 @@ public class BucketAssignOperator extends AbstractStreamOperator<Event>
 
     private final ZoneId zoneId;
 
+    private final boolean timeStampLtzToTimeStamp;
+
     public BucketAssignOperator(
-            Options catalogOptions, String schemaOperatorUid, ZoneId zoneId, String commitUser) {
+            Options catalogOptions,
+            String schemaOperatorUid,
+            ZoneId zoneId,
+            String commitUser,
+            boolean timeStampLtzToTimeStamp) {
         this.catalogOptions = catalogOptions;
         this.chainingStrategy = ChainingStrategy.ALWAYS;
         this.schemaOperatorUid = schemaOperatorUid;
         this.commitUser = commitUser;
         this.zoneId = zoneId;
+        this.timeStampLtzToTimeStamp = timeStampLtzToTimeStamp;
     }
 
     @Override
@@ -144,7 +151,8 @@ public class BucketAssignOperator extends AbstractStreamOperator<Event>
                         schemaEvolutionClient.getLatestEvolvedSchema(dataChangeEvent.tableId());
                 if (schema.isPresent()) {
                     schemaMaps.put(
-                            dataChangeEvent.tableId(), new TableSchemaInfo(schema.get(), zoneId));
+                            dataChangeEvent.tableId(),
+                            new TableSchemaInfo(schema.get(), zoneId, timeStampLtzToTimeStamp));
                 } else {
                     throw new RuntimeException(
                             "Could not find schema message from SchemaRegistry for "
@@ -195,7 +203,9 @@ public class BucketAssignOperator extends AbstractStreamOperator<Event>
                                     .map(TableSchemaInfo::getSchema)
                                     .orElse(null),
                             schemaChangeEvent);
-            schemaMaps.put(schemaChangeEvent.tableId(), new TableSchemaInfo(schema, zoneId));
+            schemaMaps.put(
+                    schemaChangeEvent.tableId(),
+                    new TableSchemaInfo(schema, zoneId, timeStampLtzToTimeStamp));
             // Broadcast SchemachangeEvent.
             for (int index = 0; index < totalTasksNumber; index++) {
                 output.collect(

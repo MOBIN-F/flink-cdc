@@ -30,9 +30,10 @@ public class TableSchemaInfo {
 
     private final List<RecordData.FieldGetter> fieldGetters;
 
-    public TableSchemaInfo(Schema schema, ZoneId zoneId) {
+    public TableSchemaInfo(Schema schema, ZoneId zoneId, boolean timeStampLtzToTimeStamp) {
         this.schema = schema;
-        this.fieldGetters = PaimonWriterHelper.createFieldGetters(schema, zoneId);
+        this.fieldGetters =
+                PaimonWriterHelper.createFieldGetters(schema, zoneId, timeStampLtzToTimeStamp);
     }
 
     public Schema getSchema() {

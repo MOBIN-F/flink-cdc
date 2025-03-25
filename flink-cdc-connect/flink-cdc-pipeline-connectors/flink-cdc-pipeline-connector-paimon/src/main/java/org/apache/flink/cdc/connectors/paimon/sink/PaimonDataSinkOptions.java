@@ -18,6 +18,7 @@
 package org.apache.flink.cdc.connectors.paimon.sink;
 
 import org.apache.flink.cdc.common.configuration.ConfigOption;
+import org.apache.flink.cdc.common.configuration.ConfigOptions;
 
 import org.apache.paimon.options.CatalogOptions;
 
@@ -64,4 +65,11 @@ public class PaimonDataSinkOptions {
                             "Partition keys for each partitioned table, allow setting multiple primary keys for multiTables. "
                                     + "Tables are separated by ';', and partition keys are separated by ','. "
                                     + "For example, we can set partition.key of two tables by 'testdb.table1:id1,id2;testdb.table2:name'.");
+
+    public static final ConfigOption<Boolean> TREAT_TIMESTAMP_LTZ_AS_TIMESTAMP_ENABLED =
+            ConfigOptions.key("paimon.treat-timestamp-ltz-as-timestamp.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Whether treat timestamp_ltz as timestamp, by default is false. ");
 }

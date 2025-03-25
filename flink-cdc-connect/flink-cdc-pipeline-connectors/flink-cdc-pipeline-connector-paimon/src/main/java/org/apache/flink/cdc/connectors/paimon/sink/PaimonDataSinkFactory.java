@@ -68,6 +68,7 @@ public class PaimonDataSinkFactory implements DataSinkFactory {
         Options options = Options.fromMap(catalogOptions);
         // Avoid using previous table schema.
         options.setString("cache-enabled", "false");
+        options.setString("hadoop.hive.metastore.disallow.incompatible.col.type.changes", "false");
         ZoneId zoneId = ZoneId.systemDefault();
         if (!Objects.equals(
                 context.getPipelineConfiguration().get(PipelineOptions.PIPELINE_LOCAL_TIME_ZONE),
@@ -81,6 +82,11 @@ public class PaimonDataSinkFactory implements DataSinkFactory {
                 context.getFactoryConfiguration().get(PaimonDataSinkOptions.COMMIT_USER);
         String partitionKey =
                 context.getFactoryConfiguration().get(PaimonDataSinkOptions.PARTITION_KEY);
+
+        boolean timeStampLtzToTimeStamp =
+                context.getFactoryConfiguration()
+                        .get(PaimonDataSinkOptions.TREAT_TIMESTAMP_LTZ_AS_TIMESTAMP_ENABLED);
+
         Map<TableId, List<String>> partitionMaps = new HashMap<>();
         if (!partitionKey.isEmpty()) {
             for (String tables : partitionKey.split(";")) {
@@ -96,7 +102,8 @@ public class PaimonDataSinkFactory implements DataSinkFactory {
                 }
             }
         }
-        PaimonRecordSerializer<Event> serializer = new PaimonRecordEventSerializer(zoneId);
+        PaimonRecordSerializer<Event> serializer =
+                new PaimonRecordEventSerializer(zoneId, timeStampLtzToTimeStamp);
         String schemaOperatorUid =
                 context.getPipelineConfiguration()
                         .get(PipelineOptions.PIPELINE_SCHEMA_OPERATOR_UID);
@@ -107,7 +114,8 @@ public class PaimonDataSinkFactory implements DataSinkFactory {
                 partitionMaps,
                 serializer,
                 zoneId,
-                schemaOperatorUid);
+                schemaOperatorUid,
+                timeStampLtzToTimeStamp);
     }
 
     @Override
@@ -129,6 +137,9 @@ public class PaimonDataSinkFactory implements DataSinkFactory {
         options.add(PaimonDataSinkOptions.URI);
         options.add(PaimonDataSinkOptions.COMMIT_USER);
         options.add(PaimonDataSinkOptions.PARTITION_KEY);
+        options.add(PaimonDataSinkOptions.TREAT_TIMESTAMP_LTZ_AS_TIMESTAMP_ENABLED);
+        options.add(
+                PaimonDataSinkOptions.HADOOP_HIVE_METASTORE_DISALLOW_INCOMPATIBLE_COL_TYPE_CHANGES);
         return options;
     }
 }

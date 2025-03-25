@@ -98,7 +98,7 @@ public class PaimonMetadataApplierTest {
             throws Catalog.TableNotExistException, Catalog.DatabaseNotEmptyException,
                     Catalog.DatabaseNotExistException, SchemaEvolveException {
         initialize(metastore);
-        MetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions);
+        MetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions, false);
         CreateTableEvent createTableEvent =
                 new CreateTableEvent(
                         TableId.parse("test.table1"),
@@ -218,7 +218,7 @@ public class PaimonMetadataApplierTest {
         Assertions.assertEquals(Arrays.asList("col1", "dt"), tableWithPartition.primaryKeys());
         // Create table with upper case.
         catalogOptions.setString("allow-upper-case", "true");
-        metadataApplier = new PaimonMetadataApplier(catalogOptions);
+        metadataApplier = new PaimonMetadataApplier(catalogOptions, false);
         createTableEvent =
                 new CreateTableEvent(
                         TableId.parse("test.table_with_upper_case"),
@@ -253,7 +253,7 @@ public class PaimonMetadataApplierTest {
         Map<TableId, List<String>> partitionMaps = new HashMap<>();
         partitionMaps.put(TableId.parse("test.table1"), Arrays.asList("col3", "col4"));
         MetadataApplier metadataApplier =
-                new PaimonMetadataApplier(catalogOptions, tableOptions, partitionMaps);
+                new PaimonMetadataApplier(catalogOptions, tableOptions, partitionMaps, false);
         CreateTableEvent createTableEvent =
                 new CreateTableEvent(
                         TableId.parse("test.table1"),
@@ -294,7 +294,7 @@ public class PaimonMetadataApplierTest {
             throws Catalog.TableNotExistException, Catalog.DatabaseNotEmptyException,
                     Catalog.DatabaseNotExistException, SchemaEvolveException {
         initialize(metastore);
-        MetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions);
+        MetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions, false);
         CreateTableEvent createTableEvent =
                 new CreateTableEvent(
                         TableId.parse("test.table1"),
@@ -404,7 +404,7 @@ public class PaimonMetadataApplierTest {
             throws Catalog.DatabaseNotEmptyException, Catalog.DatabaseNotExistException,
                     Catalog.TableNotExistException, SchemaEvolveException {
         initialize(metastore);
-        MetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions);
+        MetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions, false);
 
         CreateTableEvent createTableEvent =
                 new CreateTableEvent(
