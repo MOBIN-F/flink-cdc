@@ -138,8 +138,6 @@ public class PaimonDataSinkFactory implements DataSinkFactory {
         options.add(PaimonDataSinkOptions.COMMIT_USER);
         options.add(PaimonDataSinkOptions.PARTITION_KEY);
         options.add(PaimonDataSinkOptions.TREAT_TIMESTAMP_LTZ_AS_TIMESTAMP_ENABLED);
-        options.add(
-                PaimonDataSinkOptions.HADOOP_HIVE_METASTORE_DISALLOW_INCOMPATIBLE_COL_TYPE_CHANGES);
         return options;
     }
 }
