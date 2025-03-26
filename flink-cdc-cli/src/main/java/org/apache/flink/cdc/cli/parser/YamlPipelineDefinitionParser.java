@@ -62,6 +62,7 @@ public class YamlPipelineDefinitionParser implements PipelineDefinitionParser {
     private static final String TRANSFORM_KEY = "transform";
     private static final String PIPELINE_KEY = "pipeline";
     private static final String MODEL_KEY = "model";
+    private static final String FLINK_KEY = "flink";
 
     // Source / sink keys
     private static final String TYPE_KEY = "type";
@@ -131,6 +132,8 @@ public class YamlPipelineDefinitionParser implements PipelineDefinitionParser {
             Optional.ofNullable(
                             ((ObjectNode) pipelineDefJsonNode.get(PIPELINE_KEY)).remove(MODEL_KEY))
                     .ifPresent(node -> modelDefs.addAll(parseModels(node)));
+
+            ((ObjectNode) pipelineDefJsonNode.get(PIPELINE_KEY)).remove(FLINK_KEY);
         }
 
         // Pipeline configs are optional
