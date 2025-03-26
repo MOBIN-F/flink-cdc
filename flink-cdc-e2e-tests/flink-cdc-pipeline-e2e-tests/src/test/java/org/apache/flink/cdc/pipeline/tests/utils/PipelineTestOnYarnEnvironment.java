@@ -175,14 +175,12 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
             CommonTestUtils.setEnv(map);
 
             assertThat(yarnCluster.getServiceState()).isEqualTo(Service.STATE.STARTED);
-            // wait for the nodeManagers to connect
+            // wait for the NodeManagers to connect
             while (!yarnCluster.waitForNodeManagersToConnect(500)) {
-                LOG.info("Waiting for Nodemanagers to connect");
+                LOG.info("Waiting for NodeManagers to connect");
             }
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            LOG.error("setup failure", ex);
-            fail("");
+        } catch (Exception e) {
+            fail("setup failure", e);
         }
     }
 
@@ -243,7 +241,6 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         return env;
     }
 
-    // TODO Maybe pipeline.yml should support adding flink conf
     public void addFlinkConf(Path flinkConf) {
         Map<String, String> configToAppend = new HashMap<>();
         configToAppend.put("akka.ask.timeout", "100s");
@@ -252,7 +249,7 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         configToAppend.put("slot.request.timeout", "120000");
         try {
             if (!Files.exists(flinkConf)) {
-                throw new FileNotFoundException("conf.yaml not found at " + flinkConf);
+                throw new FileNotFoundException("config.yaml not found at " + flinkConf);
             }
             List<String> lines = new ArrayList<>(Files.readAllLines(flinkConf));
             for (Map.Entry<String, String> entry : configToAppend.entrySet()) {
