@@ -32,11 +32,10 @@ import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.MiniYARNCluster;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -76,7 +75,7 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
 
     protected static File yarnSiteXML = null;
 
-    @Rule public final TemporaryFolder temporaryFolder = new TemporaryFolder();
+    @TempDir Path temporaryFolder;
 
     private static final Duration yarnAppTerminateTimeout = Duration.ofSeconds(120);
     private static final int sleepIntervalInMS = 100;
@@ -107,7 +106,7 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         YARN_CONFIGURATION.set(TEST_CLUSTER_NAME_KEY, "flink-yarn-tests-application");
     }
 
-    @Before
+    @BeforeEach
     public void setupYarnClient() throws Exception {
         if (yarnClient == null) {
             yarnClient = YarnClient.createYarnClient();
@@ -116,12 +115,12 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         }
     }
 
-    @After
+    @AfterEach
     public void shutdownYarnClient() {
         yarnClient.stop();
     }
 
-    @AfterClass
+    @AfterAll
     public static void teardown() {
 
         if (yarnCluster != null) {
@@ -180,7 +179,7 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
                 LOG.info("Waiting for NodeManagers to connect");
             }
         } catch (Exception e) {
-            fail("setup failure", e);
+            fail("Starting MiniYARNCluster failed: ", e);
         }
     }
 
@@ -199,7 +198,7 @@ public class PipelineTestOnYarnEnvironment extends TestLogger {
         ProcessBuilder processBuilder = new ProcessBuilder();
         Map<String, String> env = getEnv();
         processBuilder.environment().putAll(env);
-        Path yamlScript = temporaryFolder.newFile("mysql-to-values.yml").toPath();
+        Path yamlScript = temporaryFolder.resolve("mysql-to-values.yml");
         Files.write(yamlScript, pipelineJob.getBytes());
 
         List<String> commandList = new ArrayList<>();
