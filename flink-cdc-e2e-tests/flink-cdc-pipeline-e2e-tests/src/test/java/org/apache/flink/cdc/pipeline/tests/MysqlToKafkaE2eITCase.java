@@ -226,7 +226,7 @@ class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
-    public void testSyncWholeDatabaseWithCanalJson() throws Exception {
+    void testSyncWholeDatabaseWithCanalJson() throws Exception {
         String pipelineJob =
                 String.format(
                         "source:\n"
@@ -302,7 +302,7 @@ class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
     }
 
     @Test
-    public void testSyncWholeDatabaseWithDebeziumJsonHasSchema() throws Exception {
+    void testSyncWholeDatabaseWithDebeziumJsonHasSchema() throws Exception {
         String pipelineJob =
                 String.format(
                         "source:\n"
