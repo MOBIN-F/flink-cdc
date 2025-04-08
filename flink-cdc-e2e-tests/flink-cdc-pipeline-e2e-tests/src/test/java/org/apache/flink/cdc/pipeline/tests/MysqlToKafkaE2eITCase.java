@@ -340,7 +340,7 @@ class MysqlToKafkaE2eITCase extends PipelineTestEnvironment {
         waitUntilSpecificEventCount(collectedRecords, expectedEventCount);
         List<String> expectedRecords =
                 getExpectedRecords("expectedEvents/mysqlToKafka/debezium-json-with-schema.txt");
-        assertThat(expectedRecords).containsAll(deserializeValues(collectedRecords));
+        assertThat(deserializeValues(collectedRecords)).containsAll(expectedRecords);
         LOG.info("Begin incremental reading stage.");
         // generate binlogs
         String mysqlJdbcUrl =
