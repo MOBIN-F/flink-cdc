@@ -49,8 +49,6 @@ import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.apache.flink.cdc.connectors.kafka.sink.KafkaDataSinkOptions.DEBEZIUM_JSON_INCLUDE_SCHEMA_ENABLED;
-
 /** Tests for {@link DebeziumJsonSerializationSchema}. */
 class DebeziumJsonSerializationSchemaTest {
 
@@ -145,7 +143,7 @@ class DebeziumJsonSerializationSchemaTest {
                 JacksonMapperFactory.createObjectMapper()
                         .configure(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN, false);
         Map<String, String> properties = new HashMap<>();
-        properties.put(DEBEZIUM_JSON_INCLUDE_SCHEMA_ENABLED.key(), "true");
+        properties.put("include-schema.enabled", "true");
         Configuration configuration = Configuration.fromMap(properties);
         SerializationSchema<Event> serializationSchema =
                 ChangeLogJsonFormatFactory.createSerializationSchema(
