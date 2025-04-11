@@ -47,9 +47,16 @@ public class BinaryRecordDataExtractor {
         return extractRecord(record, schema.toRowDataType());
     }
 
-    /** Converts a generic binary record data to Java objects. */
     @CheckReturnValue
     public static Object extractRecord(Object object, DataType dataType) {
+        StringBuilder sb = new StringBuilder("{");
+        extractRecordinr(object, dataType, sb);
+        return sb.toString();
+    }
+
+    /** Converts a generic binary record data to Java objects. */
+    @CheckReturnValue
+    public static Object extractRecordinr(Object object, DataType dataType, StringBuilder sb) {
         if (object == null) {
             return "null";
         }
@@ -79,11 +86,15 @@ public class BinaryRecordDataExtractor {
                     "Malformed MapData: keyArray size (%d) differs from valueArray (%d)",
                     keyArray.size(),
                     valueArray.size());
-            StringBuilder sb = new StringBuilder("{");
+            StringBuilder stringBuilder = new StringBuilder("{");
             for (int i = 0; i < keyArray.size(); i++) {
-                sb.append(keyArray.get(i)).append(" -> ").append(valueArray.get(i)).append(", ");
+                stringBuilder
+                        .append(keyArray.get(i))
+                        .append(" -> ")
+                        .append(valueArray.get(i))
+                        .append(", ");
             }
-            sb.delete(sb.length() - 2, sb.length());
+            stringBuilder.delete(stringBuilder.length() - 2, stringBuilder.length());
             return sb.append("}").toString();
         } else if (dataType instanceof ArrayType) {
             Preconditions.checkArgument(
@@ -110,16 +121,16 @@ public class BinaryRecordDataExtractor {
             List<DataType> fieldTypes = rowType.getFieldTypes();
             List<RecordData.FieldGetter> fieldGetters =
                     SchemaUtils.createFieldGetters(fieldTypes.toArray(new DataType[0]));
-            StringBuilder sb = new StringBuilder("{");
             for (int i = 0; i < rowType.getFieldCount(); i++) {
                 sb.append(fieldNames.get(i))
                         .append(": ")
                         .append(fieldTypes.get(i))
                         .append(" -> ")
                         .append(
-                                extractRecord(
+                                extractRecordinr(
                                         fieldGetters.get(i).getFieldOrNull(binaryRecordData),
-                                        fieldTypes.get(i)))
+                                        fieldTypes.get(i),
+                                        sb))
                         .append(", ");
             }
             sb.delete(sb.length() - 2, sb.length());
