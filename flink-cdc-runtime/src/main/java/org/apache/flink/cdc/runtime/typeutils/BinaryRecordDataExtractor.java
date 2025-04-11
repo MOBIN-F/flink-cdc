@@ -49,7 +49,10 @@ public class BinaryRecordDataExtractor {
 
     @CheckReturnValue
     public static Object extractRecord(Object object, DataType dataType) {
-        StringBuilder sb = new StringBuilder("{");
+        if (object == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
         extractRecordinr(object, dataType, sb);
         return sb.toString();
     }
@@ -57,9 +60,6 @@ public class BinaryRecordDataExtractor {
     /** Converts a generic binary record data to Java objects. */
     @CheckReturnValue
     public static Object extractRecordinr(Object object, DataType dataType, StringBuilder sb) {
-        if (object == null) {
-            return "null";
-        }
         if (dataType instanceof BinaryType || dataType instanceof VarBinaryType) {
             Preconditions.checkArgument(
                     object instanceof byte[],
@@ -121,6 +121,7 @@ public class BinaryRecordDataExtractor {
             List<DataType> fieldTypes = rowType.getFieldTypes();
             List<RecordData.FieldGetter> fieldGetters =
                     SchemaUtils.createFieldGetters(fieldTypes.toArray(new DataType[0]));
+            sb.append("{");
             for (int i = 0; i < rowType.getFieldCount(); i++) {
                 sb.append(fieldNames.get(i))
                         .append(": ")
