@@ -110,22 +110,49 @@ public class BinaryRecordDataExtractor {
             List<DataType> fieldTypes = rowType.getFieldTypes();
             List<RecordData.FieldGetter> fieldGetters =
                     SchemaUtils.createFieldGetters(fieldTypes.toArray(new DataType[0]));
-            StringBuilder sb = new StringBuilder("{");
-            for (int i = 0; i < rowType.getFieldCount(); i++) {
-                sb.append(fieldNames.get(i))
-                        .append(": ")
-                        .append(fieldTypes.get(i))
-                        .append(" -> ")
-                        .append(
-                                extractRecord(
-                                        fieldGetters.get(i).getFieldOrNull(binaryRecordData),
-                                        fieldTypes.get(i)))
-                        .append(", ");
-            }
-            sb.delete(sb.length() - 2, sb.length());
-            return sb.append("}").toString();
+            StringBuilder sb = new StringBuilder();
+            formatRow(sb, fieldNames, fieldTypes, fieldGetters, binaryRecordData);
+            return sb.toString();
         } else {
             return object.toString();
         }
+    }
+
+    private static void formatRow(
+            StringBuilder sb,
+            List<String> fieldNames,
+            List<DataType> fieldTypes,
+            List<RecordData.FieldGetter> fieldGetters,
+            RecordData binaryRecordData) {
+        sb.append("{");
+        for (int i = 0; i < fieldNames.size(); i++) {
+            String fieldName = fieldNames.get(i);
+            DataType fieldType = fieldTypes.get(i);
+            RecordData.FieldGetter fieldGetter = fieldGetters.get(i);
+
+            sb.append(fieldName).append(": ").append(fieldType).append(" -> ");
+            Object fieldValue = fieldGetter.getFieldOrNull(binaryRecordData);
+
+            if (fieldValue != null && fieldType instanceof RowType) {
+                RowType nestedRowType = (RowType) fieldType;
+                RecordData nestedRecordData = (RecordData) fieldValue;
+                List<String> nestedFieldNames = nestedRowType.getFieldNames();
+                List<DataType> nestedFieldTypes = nestedRowType.getFieldTypes();
+                List<RecordData.FieldGetter> nestedFieldGetters =
+                        SchemaUtils.createFieldGetters(nestedFieldTypes.toArray(new DataType[0]));
+
+                formatRow(
+                        sb,
+                        nestedFieldNames,
+                        nestedFieldTypes,
+                        nestedFieldGetters,
+                        nestedRecordData);
+            } else {
+                sb.append(extractRecord(fieldValue, fieldTypes.get(i)));
+            }
+            sb.append(", ");
+        }
+        sb.delete(sb.length() - 2, sb.length());
+        sb.append("}");
     }
 }
