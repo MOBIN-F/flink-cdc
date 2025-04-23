@@ -76,6 +76,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 /**
@@ -138,34 +139,36 @@ public class SchemaMergingUtils {
         List<Column> upcomingColumns = upcomingSchema.getColumns();
 
         List<Column> appendedColumns = new ArrayList<>();
-
-        for (Column upcomingColumn : upcomingColumns) {
-            String columnName = upcomingColumn.getName();
-            DataType upcomingColumnType = upcomingColumn.getType();
-            if (currentColumns.containsKey(columnName)) {
-                Column currentColumn = currentColumns.get(columnName);
-                DataType currentColumnType = currentColumn.getType();
-                DataType leastCommonType =
-                        getLeastCommonType(currentColumnType, upcomingColumnType);
-                if (!Objects.equals(leastCommonType, currentColumnType)) {
-                    newTypeMapping.put(columnName, leastCommonType);
-                }
-            } else {
-                appendedColumns.add(upcomingColumn);
-            }
-        }
-
         List<Column> commonColumns = new ArrayList<>();
-        for (Column column : currentSchema.getColumns()) {
-            if (newTypeMapping.containsKey(column.getName())) {
-                commonColumns.add(column.copy(newTypeMapping.get(column.getName())));
+
+        CopyOnWriteArrayList<Column> commonColumns1 = new CopyOnWriteArrayList<>();
+        currentSchema.getColumns().forEach(x -> commonColumns1.add(x));
+
+        for (Column item : upcomingColumns) {
+            if (!currentColumns.containsKey(item.getName())) {
+                int insertIndex = commonColumns1.size();
+                for (int i = 0; i < commonColumns1.size(); i++) {
+                    int i1 = upcomingColumns.indexOf(commonColumns1.get(i));
+                    int i2 = upcomingColumns.indexOf(item);
+                    if (i1 > i2) {
+                        insertIndex = i;
+                        break;
+                    }
+                }
+                commonColumns1.add(insertIndex, item);
             } else {
-                commonColumns.add(column);
+                Column currentColumn = currentColumns.get(item.getName());
+                DataType currentColumnType = currentColumn.getType();
+                DataType leastCommonType = getLeastCommonType(currentColumnType, item.getType());
+                if (!Objects.equals(leastCommonType, currentColumnType)) {
+                    int index = commonColumns1.indexOf(currentColumn);
+                    commonColumns1.set(index, item.copy(leastCommonType));
+                }
             }
         }
 
-        commonColumns.addAll(appendedColumns);
-        return currentSchema.copy(commonColumns);
+        Schema copy = currentSchema.copy(commonColumns1);
+        return copy;
     }
 
     /** Merge compatible schemas. */
