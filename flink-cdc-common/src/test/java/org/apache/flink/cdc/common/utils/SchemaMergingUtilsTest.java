@@ -357,6 +357,26 @@ class SchemaMergingUtilsTest {
     }
 
     @Test
+    void testIsDataTypeCompatibled() {
+        Schema leastCommonSchema =
+                getLeastCommonSchema(
+                        of("id", BIGINT, "c", BIGINT),of("id", BIGINT, "b", BIGINT, "c", BIGINT));
+        System.out.println(leastCommonSchema);
+    }
+
+
+    @Test
+    void testIsDataTypeCompatible2() {
+        Schema leastCommonSchema =
+                getLeastCommonSchema(
+                         of("id", BIGINT, "name", BIGINT, "age", BIGINT,"dec", BIGINT, "bb", BIGINT),of("id", BIGINT, "last_name", BIGINT, "age", BIGINT));
+       //update: columns={`id` BIGINT,`name` BIGINT,`last_name` BIGINT,`age` BIGINT,`dec` BIGINT,`bb` BIGINT}, primaryKeys=, options=()
+        //master :
+        System.out.println(leastCommonSchema);
+    }
+
+
+    @Test
     void testGetSchemaDifference() {
         Assertions.assertThat(
                         getSchemaDifference(TABLE_ID, null, of("id", BIGINT, "name", VARCHAR(17))))
