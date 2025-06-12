@@ -371,6 +371,7 @@ class MysqlE2eITCase extends PipelineTestEnvironment {
         LOG.info("Pipeline job is running");
 
         validateResult(
+                dbNameFormatter,
                 "CreateTableEvent{tableId=%s.customers, schema=columns={`id` INT NOT NULL,`name` VARCHAR(255) NOT NULL 'flink'}, primaryKeys=id, options=()}",
                 "DataChangeEvent{tableId=%s.customers, before=[], after=[104, user_4], op=INSERT, meta=()}",
                 "DataChangeEvent{tableId=%s.customers, before=[], after=[103, user_3], op=INSERT, meta=()}",
@@ -452,6 +453,7 @@ class MysqlE2eITCase extends PipelineTestEnvironment {
                         mysqlInventoryDatabase.getDatabaseName()));
 
         validateResult(
+                dbNameFormatter,
                 "DataChangeEvent{tableId=%s.products, before=[106, hammer], after=[106, hammer], op=UPDATE, meta=()}",
                 "DataChangeEvent{tableId=%s.products, before=[107, rocks], after=[107, rocks], op=UPDATE, meta=()}",
                 "DataChangeEvent{tableId=%s.products, before=[], after=[110, jacket], op=INSERT, meta=()}",
@@ -499,8 +501,17 @@ class MysqlE2eITCase extends PipelineTestEnvironment {
         submitPipelineJob(pipelineJob);
         waitUntilJobRunning(Duration.ofSeconds(30));
         LOG.info("Pipeline job is running");
+        waitUntilSpecificEvent(
+                String.format(
+                        "DataChangeEvent{tableId=%s.customers, before=[], after=[104, Shanghai, 123567891234], op=INSERT, meta=()}",
+                        mysqlInventoryDatabase.getDatabaseName()));
+        waitUntilSpecificEvent(
+                String.format(
+                        "DataChangeEvent{tableId=%s.products, before=[], after=[109, 24 inch spare tire, 22.2, null, null, null], op=INSERT, meta=()}",
+                        mysqlInventoryDatabase.getDatabaseName()));
 
         validateResult(
+                dbNameFormatter,
                 "CreateTableEvent{tableId=%s.customers, schema=columns={`id` INT NOT NULL,`address` VARCHAR(1024),`phone_number` VARCHAR(512)}, primaryKeys=id, options=()}",
                 "DataChangeEvent{tableId=%s.customers, before=[], after=[104, Shanghai, 123567891234], op=INSERT, meta=()}",
                 "DataChangeEvent{tableId=%s.customers, before=[], after=[103, Shanghai, 123567891234], op=INSERT, meta=()}",
@@ -582,6 +593,7 @@ class MysqlE2eITCase extends PipelineTestEnvironment {
                         mysqlInventoryDatabase.getDatabaseName()));
 
         validateResult(
+                dbNameFormatter,
                 "DataChangeEvent{tableId=%s.products, before=[106, 16oz carpenter's hammer, 1.0, null, null, null], after=[106, 18oz carpenter hammer, 1.0, null, null, null], op=UPDATE, meta=()}",
                 "DataChangeEvent{tableId=%s.products, before=[107, box of assorted rocks, 5.3, null, null, null], after=[107, box of assorted rocks, 5.1, null, null, null], op=UPDATE, meta=()}",
                 "AddColumnEvent{tableId=%s.products, addedColumns=[ColumnWithPosition{column=`new_col` INT, position=LAST, existedColumnName=null}]}",
