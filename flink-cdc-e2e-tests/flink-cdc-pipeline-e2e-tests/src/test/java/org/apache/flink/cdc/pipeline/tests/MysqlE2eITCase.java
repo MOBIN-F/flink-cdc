@@ -369,14 +369,6 @@ class MysqlE2eITCase extends PipelineTestEnvironment {
         submitPipelineJob(pipelineJob);
         waitUntilJobRunning(Duration.ofSeconds(30));
         LOG.info("Pipeline job is running");
-        waitUntilSpecificEvent(
-                String.format(
-                        "DataChangeEvent{tableId=%s.customers, before=[], after=[104, user_4], op=INSERT, meta=()}",
-                        mysqlInventoryDatabase.getDatabaseName()));
-        waitUntilSpecificEvent(
-                String.format(
-                        "DataChangeEvent{tableId=%s.products, before=[], after=[109, spare tire], op=INSERT, meta=()}",
-                        mysqlInventoryDatabase.getDatabaseName()));
 
         validateResult(
                 "CreateTableEvent{tableId=%s.customers, schema=columns={`id` INT NOT NULL,`name` VARCHAR(255) NOT NULL 'flink'}, primaryKeys=id, options=()}",
@@ -507,14 +499,6 @@ class MysqlE2eITCase extends PipelineTestEnvironment {
         submitPipelineJob(pipelineJob);
         waitUntilJobRunning(Duration.ofSeconds(30));
         LOG.info("Pipeline job is running");
-        waitUntilSpecificEvent(
-                String.format(
-                        "DataChangeEvent{tableId=%s.customers, before=[], after=[104, Shanghai, 123567891234], op=INSERT, meta=()}",
-                        mysqlInventoryDatabase.getDatabaseName()));
-        waitUntilSpecificEvent(
-                String.format(
-                        "DataChangeEvent{tableId=%s.products, before=[], after=[109, 24 inch spare tire, 22.2, null, null, null], op=INSERT, meta=()}",
-                        mysqlInventoryDatabase.getDatabaseName()));
 
         validateResult(
                 "CreateTableEvent{tableId=%s.customers, schema=columns={`id` INT NOT NULL,`address` VARCHAR(1024),`phone_number` VARCHAR(512)}, primaryKeys=id, options=()}",
