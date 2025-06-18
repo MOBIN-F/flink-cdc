@@ -252,7 +252,7 @@ class PaimonMetadataApplierTest {
         Map<String, String> tableOptions = new HashMap<>();
         tableOptions.put("bucket", "-1");
         MetadataApplier metadataApplier =
-                new PaimonMetadataApplier(catalogOptions, tableOptions, new HashMap<>());
+                new PaimonMetadataApplier(catalogOptions, tableOptions, new HashMap<>(), false);
         CreateTableEvent createTableEvent =
                 new CreateTableEvent(
                         TableId.parse("test.table1"),
@@ -542,7 +542,7 @@ class PaimonMetadataApplierTest {
         Map<String, String> tableOptions = new HashMap<>();
         tableOptions.put("bucket", "-1");
         MetadataApplier metadataApplier =
-                new PaimonMetadataApplier(catalogOptions, tableOptions, new HashMap<>());
+                new PaimonMetadataApplier(catalogOptions, tableOptions, new HashMap<>(), false);
         CreateTableEvent createTableEvent =
                 new CreateTableEvent(
                         TableId.parse("test.table_with_comment"),

@@ -334,7 +334,8 @@ public class PaimonSinkITCase {
         initialize(metastore);
         PaimonSink<Event> paimonSink =
                 new PaimonSink<>(
-                        catalogOptions, new PaimonRecordEventSerializer(ZoneId.systemDefault()));
+                        catalogOptions,
+                        new PaimonRecordEventSerializer(ZoneId.systemDefault(), false));
         PaimonWriter<Event> writer = paimonSink.createWriter(new MockInitContext());
         Committer<MultiTableCommittable> committer = paimonSink.createCommitter();
 

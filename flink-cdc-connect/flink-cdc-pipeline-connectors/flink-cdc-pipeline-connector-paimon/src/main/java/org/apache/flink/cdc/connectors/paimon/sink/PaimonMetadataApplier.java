@@ -36,9 +36,6 @@ import org.apache.flink.cdc.common.sink.MetadataApplier;
 import org.apache.flink.cdc.common.types.DataType;
 import org.apache.flink.cdc.common.types.DataTypes;
 import org.apache.flink.cdc.common.types.TimestampType;
-import org.apache.flink.cdc.common.types.DataType;
-import org.apache.flink.cdc.common.types.DataTypes;
-import org.apache.flink.cdc.common.types.TimestampType;
 import org.apache.flink.cdc.common.types.utils.DataTypeUtils;
 
 import org.apache.flink.shaded.guava31.com.google.common.collect.Sets;
@@ -60,7 +57,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.apache.flink.cdc.common.types.DataTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
 import static org.apache.flink.cdc.common.types.DataTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
 import static org.apache.flink.cdc.common.utils.Preconditions.checkArgument;
 import static org.apache.flink.cdc.common.utils.Preconditions.checkNotNull;
@@ -184,7 +180,7 @@ public class PaimonMetadataApplier implements MetadataApplier {
                     new org.apache.paimon.schema.Schema.Builder();
             schema.getColumns()
                     .forEach(
-                            (column) ->{
+                            (column) -> {
                                 DataType dataType;
                                 if (column.getType().getTypeRoot() == TIMESTAMP_WITH_LOCAL_TIME_ZONE
                                         && timeStampLtzToTimeStamp) {
@@ -198,8 +194,7 @@ public class PaimonMetadataApplier implements MetadataApplier {
                                                 DataTypeUtils.toFlinkDataType(dataType)
                                                         .getLogicalType()),
                                         column.getComment());
-                            }
-                                    );
+                            });
             List<String> partitionKeys = new ArrayList<>();
             List<String> primaryKeys = schema.primaryKeys();
             if (partitionMaps.containsKey(event.tableId())) {

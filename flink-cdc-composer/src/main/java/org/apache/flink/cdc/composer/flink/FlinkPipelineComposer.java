@@ -86,9 +86,16 @@ public class FlinkPipelineComposer implements PipelineComposer {
         return new FlinkPipelineComposer(env, false);
     }
 
+    @VisibleForTesting
     public static FlinkPipelineComposer ofMiniCluster() {
         return new FlinkPipelineComposer(
                 StreamExecutionEnvironment.getExecutionEnvironment(), true);
+    }
+
+    public static FlinkPipelineComposer ofMiniCluster(
+            org.apache.flink.configuration.Configuration flinkConfig) {
+        return new FlinkPipelineComposer(
+                StreamExecutionEnvironment.getExecutionEnvironment(flinkConfig), true);
     }
 
     private FlinkPipelineComposer(StreamExecutionEnvironment env, boolean isBlocking) {
