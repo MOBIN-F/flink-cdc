@@ -32,6 +32,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.ENCODE_DECIMAL_AS_PLAIN_NUMBER;
+import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.ENCODE_IGNORE_NULL_FIELDS;
 import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.FAIL_ON_MISSING_FIELD;
 import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.IGNORE_PARSE_ERRORS;
 import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.MAP_NULL_KEY_LITERAL;
@@ -59,7 +60,7 @@ public class JsonFormatFactory implements FormatFactory {
         org.apache.flink.formats.json.JsonFormatOptions.MapNullKeyMode mapNullKeyMode =
                 JsonFormatOptionsUtil.getMapNullKeyMode(formatOptions);
         String mapNullKeyLiteral = formatOptions.get(JSON_MAP_NULL_KEY_LITERAL);
-
+        boolean ignoreNullFields = formatOptions.get(ENCODE_IGNORE_NULL_FIELDS);
         Boolean encodeDecimalAsPlainNumber = formatOptions.get(ENCODE_DECIMAL_AS_PLAIN_NUMBER);
         ZoneId zoneId = ZoneId.systemDefault();
         if (!Objects.equals(
@@ -75,7 +76,8 @@ public class JsonFormatFactory implements FormatFactory {
                 mapNullKeyMode,
                 mapNullKeyLiteral,
                 zoneId,
-                encodeDecimalAsPlainNumber);
+                encodeDecimalAsPlainNumber,
+                ignoreNullFields);
     }
 
     @Override

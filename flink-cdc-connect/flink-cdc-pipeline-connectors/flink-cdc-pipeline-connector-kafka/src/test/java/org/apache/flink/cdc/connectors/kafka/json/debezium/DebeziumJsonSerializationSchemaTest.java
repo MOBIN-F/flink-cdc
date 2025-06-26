@@ -19,7 +19,6 @@ package org.apache.flink.cdc.connectors.kafka.json.debezium;
 
 import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.cdc.common.configuration.Configuration;
-import org.apache.flink.cdc.common.data.TimestampData;
 import org.apache.flink.cdc.common.data.DecimalData;
 import org.apache.flink.cdc.common.data.LocalZonedTimestampData;
 import org.apache.flink.cdc.common.data.TimestampData;
@@ -44,19 +43,21 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.sql.Timestamp;
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.ENCODE_DECIMAL_AS_PLAIN_NUMBER;
+import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.ENCODE_IGNORE_NULL_FIELDS;
 import static org.apache.flink.cdc.connectors.kafka.format.canal.CanalJsonFormatOptions.JSON_MAP_NULL_KEY_LITERAL;
+import static org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonFormatOptions.SCHEMA_INCLUDE;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /** Tests for {@link DebeziumJsonSerializationSchema}. */
 class DebeziumJsonSerializationSchemaTest {
@@ -74,6 +75,8 @@ class DebeziumJsonSerializationSchemaTest {
         JsonFormatOptions.MapNullKeyMode mapNullKeyMode =
                 JsonFormatOptionsUtil.getMapNullKeyMode(formatOptions);
         String mapNullKeyLiteral = formatOptions.get(JSON_MAP_NULL_KEY_LITERAL);
+        boolean ignoreNullFields = formatOptions.get(ENCODE_IGNORE_NULL_FIELDS);
+        boolean schemaInclude = formatOptions.get(SCHEMA_INCLUDE);
 
         Boolean encodeDecimalAsPlainNumber = formatOptions.get(ENCODE_DECIMAL_AS_PLAIN_NUMBER);
         SerializationSchema<Event> serializationSchema =
@@ -82,7 +85,9 @@ class DebeziumJsonSerializationSchemaTest {
                         mapNullKeyMode,
                         mapNullKeyLiteral,
                         ZoneId.systemDefault(),
-                        encodeDecimalAsPlainNumber);
+                        encodeDecimalAsPlainNumber,
+                        ignoreNullFields,
+                        schemaInclude);
         serializationSchema.open(new MockInitializationContext());
         // create table
         Schema schema =
@@ -162,10 +167,25 @@ class DebeziumJsonSerializationSchemaTest {
                         .configure(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN, false);
         Map<String, String> properties = new HashMap<>();
         properties.put("include-schema.enabled", "true");
-        Configuration configuration = Configuration.fromMap(properties);
+        Configuration formatOptions = new Configuration();
+        TimestampFormat timestampFormat = JsonFormatOptionsUtil.getTimestampFormat(formatOptions);
+        JsonFormatOptions.MapNullKeyMode mapNullKeyMode =
+                JsonFormatOptionsUtil.getMapNullKeyMode(formatOptions);
+        String mapNullKeyLiteral = formatOptions.get(JSON_MAP_NULL_KEY_LITERAL);
+        boolean ignoreNullFields = formatOptions.get(ENCODE_IGNORE_NULL_FIELDS);
+        boolean schemaInclude = formatOptions.get(SCHEMA_INCLUDE);
+
+        Boolean encodeDecimalAsPlainNumber = formatOptions.get(ENCODE_DECIMAL_AS_PLAIN_NUMBER);
         SerializationSchema<Event> serializationSchema =
-                ChangeLogJsonFormatFactory.createSerializationSchema(
-                        configuration, JsonSerializationType.DEBEZIUM_JSON, ZoneId.systemDefault());
+                new DebeziumJsonSerializationSchema(
+                        timestampFormat,
+                        mapNullKeyMode,
+                        mapNullKeyLiteral,
+                        ZoneId.systemDefault(),
+                        encodeDecimalAsPlainNumber,
+                        ignoreNullFields,
+                        schemaInclude);
+
         serializationSchema.open(new MockInitializationContext());
         // create table
         Schema schema =
@@ -277,6 +297,8 @@ class DebeziumJsonSerializationSchemaTest {
         JsonFormatOptions.MapNullKeyMode mapNullKeyMode =
                 JsonFormatOptionsUtil.getMapNullKeyMode(formatOptions);
         String mapNullKeyLiteral = formatOptions.get(JSON_MAP_NULL_KEY_LITERAL);
+        boolean ignoreNullFields = formatOptions.get(ENCODE_IGNORE_NULL_FIELDS);
+        boolean schemaInclude = formatOptions.get(SCHEMA_INCLUDE);
 
         Boolean encodeDecimalAsPlainNumber = formatOptions.get(ENCODE_DECIMAL_AS_PLAIN_NUMBER);
         SerializationSchema<Event> serializationSchema =
@@ -285,7 +307,9 @@ class DebeziumJsonSerializationSchemaTest {
                         mapNullKeyMode,
                         mapNullKeyLiteral,
                         ZoneId.systemDefault(),
-                        encodeDecimalAsPlainNumber);
+                        encodeDecimalAsPlainNumber,
+                        ignoreNullFields,
+                        schemaInclude);
         serializationSchema.open(new MockInitializationContext());
         // create table
         Schema schema =

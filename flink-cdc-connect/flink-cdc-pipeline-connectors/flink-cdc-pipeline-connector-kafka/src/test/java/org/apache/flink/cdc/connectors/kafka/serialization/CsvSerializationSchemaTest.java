@@ -33,7 +33,7 @@ import org.apache.flink.cdc.runtime.typeutils.BinaryRecordDataGenerator;
 
 import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableMap;
 
-import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.time.ZoneId;
@@ -58,7 +58,7 @@ class CsvSerializationSchemaTest {
                         .primaryKey("col1")
                         .build();
         CreateTableEvent createTableEvent = new CreateTableEvent(TABLE_1, schema);
-        Assertions.assertThat(serializationSchema.serialize(createTableEvent)).isNull();
+        Assertions.assertNull(serializationSchema.serialize(createTableEvent));
 
         // insert
         BinaryRecordDataGenerator generator =
@@ -73,7 +73,7 @@ class CsvSerializationSchemaTest {
                                 }));
         String expected = "\"default_namespace.default_schema.table1\",1";
         String actual = new String(serializationSchema.serialize(insertEvent1));
-        Assertions.assertThat(actual).isEqualTo(expected);
+        Assertions.assertEquals(actual, expected);
 
         DataChangeEvent insertEvent2 =
                 DataChangeEvent.insertEvent(
@@ -85,7 +85,7 @@ class CsvSerializationSchemaTest {
                                 }));
         expected = "\"default_namespace.default_schema.table1\",2";
         actual = new String(serializationSchema.serialize(insertEvent2));
-        Assertions.assertThat(actual).isEqualTo(expected);
+        Assertions.assertEquals(actual, expected);
 
         DataChangeEvent deleteEvent =
                 DataChangeEvent.deleteEvent(
@@ -97,7 +97,7 @@ class CsvSerializationSchemaTest {
                                 }));
         expected = "\"default_namespace.default_schema.table1\",2";
         actual = new String(serializationSchema.serialize(deleteEvent));
-        Assertions.assertThat(actual).isEqualTo(expected);
+        Assertions.assertEquals(actual, expected);
 
         DataChangeEvent updateEvent =
                 DataChangeEvent.updateEvent(
@@ -114,7 +114,7 @@ class CsvSerializationSchemaTest {
                                 }));
         expected = "\"default_namespace.default_schema.table1\",1";
         actual = new String(serializationSchema.serialize(updateEvent));
-        Assertions.assertThat(actual).isEqualTo(expected);
+        Assertions.assertEquals(actual, expected);
     }
 
     @Test

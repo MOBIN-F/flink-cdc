@@ -45,6 +45,7 @@ import org.junit.jupiter.api.Test;
 import java.time.ZoneId;
 
 import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.ENCODE_DECIMAL_AS_PLAIN_NUMBER;
+import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.ENCODE_IGNORE_NULL_FIELDS;
 import static org.apache.flink.cdc.connectors.kafka.format.canal.CanalJsonFormatOptions.JSON_MAP_NULL_KEY_LITERAL;
 
 /** Tests for {@link JsonSerializationSchema}. */
@@ -63,6 +64,7 @@ class JsonSerializationSchemaTest {
         JsonFormatOptions.MapNullKeyMode mapNullKeyMode =
                 JsonFormatOptionsUtil.getMapNullKeyMode(formatOptions);
         String mapNullKeyLiteral = formatOptions.get(JSON_MAP_NULL_KEY_LITERAL);
+        boolean ignoreNullFields = formatOptions.get(ENCODE_IGNORE_NULL_FIELDS);
 
         Boolean encodeDecimalAsPlainNumber = formatOptions.get(ENCODE_DECIMAL_AS_PLAIN_NUMBER);
         SerializationSchema<Event> serializationSchema =
@@ -71,7 +73,8 @@ class JsonSerializationSchemaTest {
                         mapNullKeyMode,
                         mapNullKeyLiteral,
                         ZoneId.systemDefault(),
-                        encodeDecimalAsPlainNumber);
+                        encodeDecimalAsPlainNumber,
+                        ignoreNullFields);
         serializationSchema.open(new MockInitializationContext());
 
         // create table

@@ -30,8 +30,10 @@ import org.apache.flink.cdc.common.types.TimestampType;
 import org.apache.flink.cdc.common.types.utils.DataTypeUtils;
 import org.apache.flink.cdc.common.utils.SchemaUtils;
 import org.apache.flink.cdc.connectors.kafka.json.TableSchemaInfo;
+import org.apache.flink.cdc.connectors.kafka.utils.JsonRowDataSerializationSchemaUtils;
 import org.apache.flink.formats.common.TimestampFormat;
 import org.apache.flink.formats.json.JsonFormatOptions;
+import org.apache.flink.formats.json.JsonRowDataSerializationSchema;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.StringData;
@@ -58,14 +60,14 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 
 import static java.lang.String.format;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.AFTER;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.BEFORE;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.OPERATION;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.SOURCE;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumSource.DATABASE;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumSource.TABLE;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumStruct.PAYLOAD;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumStruct.SCHEMA;
+import static org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonStruct.DebeziumPayload.AFTER;
+import static org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonStruct.DebeziumPayload.BEFORE;
+import static org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonStruct.DebeziumPayload.OPERATION;
+import static org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonStruct.DebeziumPayload.SOURCE;
+import static org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonStruct.DebeziumSource.DATABASE;
+import static org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonStruct.DebeziumSource.TABLE;
+import static org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonStruct.DebeziumStruct.PAYLOAD;
+import static org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonStruct.DebeziumStruct.SCHEMA;
 import static org.apache.flink.table.types.utils.TypeConversions.fromLogicalToDataType;
 
 /**
@@ -165,16 +167,15 @@ public class DebeziumJsonSerializationSchema implements SerializationSchema<Even
             }
             LogicalType rowType =
                     DataTypeUtils.toFlinkDataType(schema.toRowDataType()).getLogicalType();
-            DebeziumJsonRowDataSerializationSchema jsonSerializer =
-                    new DebeziumJsonRowDataSerializationSchema(
+            JsonRowDataSerializationSchema jsonSerializer =
+                    JsonRowDataSerializationSchemaUtils.createSerializationSchema(
                             createJsonRowType(
                                     fromLogicalToDataType(rowType), isIncludedDebeziumSchema),
                             timestampFormat,
                             mapNullKeyMode,
                             mapNullKeyLiteral,
                             encodeDecimalAsPlainNumber,
-                            ignoreNullFields,
-                            isIncludedDebeziumSchema);
+                            ignoreNullFields);
             try {
                 jsonSerializer.open(context);
             } catch (Exception e) {

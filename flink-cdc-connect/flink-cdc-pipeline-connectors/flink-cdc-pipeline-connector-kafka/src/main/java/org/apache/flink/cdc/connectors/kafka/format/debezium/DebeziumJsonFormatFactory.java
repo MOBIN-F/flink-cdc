@@ -27,7 +27,6 @@ import org.apache.flink.cdc.connectors.kafka.format.FormatFactory;
 import org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptionsUtil;
 import org.apache.flink.formats.common.TimestampFormat;
 import org.apache.flink.formats.json.JsonFormatOptions;
-import org.apache.flink.table.api.ValidationException;
 
 import java.time.ZoneId;
 import java.util.Collections;
@@ -36,6 +35,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.ENCODE_DECIMAL_AS_PLAIN_NUMBER;
+import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.ENCODE_IGNORE_NULL_FIELDS;
 import static org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonFormatOptions.IGNORE_PARSE_ERRORS;
 import static org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonFormatOptions.JSON_MAP_NULL_KEY_LITERAL;
 import static org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonFormatOptions.JSON_MAP_NULL_KEY_MODE;
@@ -51,14 +51,16 @@ public class DebeziumJsonFormatFactory implements FormatFactory {
     public SerializationSchema<Event> createEncodingFormat(
             Context context, Configuration formatOptions) {
         FactoryHelper.validateFactoryOptions(this, context.getFactoryConfiguration());
-        validateEncodingFormatOptions(formatOptions);
+        //        validateEncodingFormatOptions(formatOptions);
 
         TimestampFormat timestampFormat = JsonFormatOptionsUtil.getTimestampFormat(formatOptions);
         JsonFormatOptions.MapNullKeyMode mapNullKeyMode =
                 JsonFormatOptionsUtil.getMapNullKeyMode(formatOptions);
         String mapNullKeyLiteral = formatOptions.get(JSON_MAP_NULL_KEY_LITERAL);
 
-        Boolean encodeDecimalAsPlainNumber = formatOptions.get(ENCODE_DECIMAL_AS_PLAIN_NUMBER);
+        boolean encodeDecimalAsPlainNumber = formatOptions.get(ENCODE_DECIMAL_AS_PLAIN_NUMBER);
+        boolean ignoreNullFields = formatOptions.get(ENCODE_IGNORE_NULL_FIELDS);
+        boolean schemaInclude = formatOptions.get(SCHEMA_INCLUDE);
 
         ZoneId zoneId = ZoneId.systemDefault();
         if (!Objects.equals(
@@ -74,7 +76,9 @@ public class DebeziumJsonFormatFactory implements FormatFactory {
                 mapNullKeyMode,
                 mapNullKeyLiteral,
                 zoneId,
-                encodeDecimalAsPlainNumber);
+                encodeDecimalAsPlainNumber,
+                ignoreNullFields,
+                schemaInclude);
     }
 
     @Override
@@ -99,16 +103,17 @@ public class DebeziumJsonFormatFactory implements FormatFactory {
         return options;
     }
 
-    /** Validator for debezium encoding format. */
-    private static void validateEncodingFormatOptions(Configuration tableOptions) {
-        JsonFormatOptionsUtil.validateEncodingFormatOptions(tableOptions);
-
-        // validator for {@link SCHEMA_INCLUDE}
-        if (tableOptions.get(DebeziumJsonFormatOptions.SCHEMA_INCLUDE)) {
-            throw new ValidationException(
-                    String.format(
-                            "Debezium JSON serialization doesn't support '%s.%s' option been set to true.",
-                            IDENTIFIER, DebeziumJsonFormatOptions.SCHEMA_INCLUDE.key()));
-        }
-    }
+    //    /** Validator for debezium encoding format. */
+    //    private static void validateEncodingFormatOptions(Configuration tableOptions) {
+    //        JsonFormatOptionsUtil.validateEncodingFormatOptions(tableOptions);
+    //
+    //        // validator for {@link SCHEMA_INCLUDE}
+    //        if (tableOptions.get(DebeziumJsonFormatOptions.SCHEMA_INCLUDE)) {
+    //            throw new ValidationException(
+    //                    String.format(
+    //                            "Debezium JSON serialization doesn't support '%s.%s' option been
+    // set to true.",
+    //                            IDENTIFIER, DebeziumJsonFormatOptions.SCHEMA_INCLUDE.key()));
+    //        }
+    //    }
 }

@@ -18,6 +18,7 @@
 package org.apache.flink.cdc.connectors.kafka.sink;
 
 import org.apache.flink.cdc.common.configuration.ConfigOption;
+import org.apache.flink.cdc.common.configuration.description.Description;
 import org.apache.flink.cdc.connectors.kafka.format.JsonFormatFactory;
 import org.apache.flink.cdc.connectors.kafka.format.debezium.DebeziumJsonFormatFactory;
 import org.apache.flink.connector.base.DeliveryGuarantee;

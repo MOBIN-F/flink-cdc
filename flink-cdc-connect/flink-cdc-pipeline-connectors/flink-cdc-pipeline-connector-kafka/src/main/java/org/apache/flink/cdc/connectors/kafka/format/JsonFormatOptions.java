@@ -56,6 +56,13 @@ public class JsonFormatOptions {
                     .withDescription(
                             "Optional flag to specify string literal for null keys when 'map-null-key.mode' is LITERAL, \"null\" by default.");
 
+    public static final ConfigOption<Boolean> ENCODE_IGNORE_NULL_FIELDS =
+            ConfigOptions.key("encode.ignore-null-fields")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Optional flag to specify whether to ignore null fields when encoding, false by default.");
+
     public static final ConfigOption<String> TIMESTAMP_FORMAT =
             ConfigOptions.key("timestamp-format.standard")
                     .stringType()

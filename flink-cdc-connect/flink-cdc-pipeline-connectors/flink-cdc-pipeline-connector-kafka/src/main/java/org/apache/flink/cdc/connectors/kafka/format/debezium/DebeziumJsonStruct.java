@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.cdc.connectors.kafka.json.debezium;
+package org.apache.flink.cdc.connectors.kafka.format.debezium;
 
 /** Debezium JSON struct. */
 public class DebeziumJsonStruct {

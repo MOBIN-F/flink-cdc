@@ -35,6 +35,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.ENCODE_DECIMAL_AS_PLAIN_NUMBER;
+import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.ENCODE_IGNORE_NULL_FIELDS;
 import static org.apache.flink.cdc.connectors.kafka.format.JsonFormatOptions.TIMESTAMP_FORMAT;
 import static org.apache.flink.cdc.connectors.kafka.format.canal.CanalJsonFormatOptions.DATABASE_INCLUDE;
 import static org.apache.flink.cdc.connectors.kafka.format.canal.CanalJsonFormatOptions.IGNORE_PARSE_ERRORS;
@@ -64,6 +65,7 @@ public class CanalJsonFormatFactory implements FormatFactory {
         String mapNullKeyLiteral = formatOptions.get(JSON_MAP_NULL_KEY_LITERAL);
 
         Boolean encodeDecimalAsPlainNumber = formatOptions.get(ENCODE_DECIMAL_AS_PLAIN_NUMBER);
+        Boolean ignoreNullFields = formatOptions.get(ENCODE_IGNORE_NULL_FIELDS);
         ZoneId zoneId = ZoneId.systemDefault();
         if (!Objects.equals(
                 context.getPipelineConfiguration().get(PipelineOptions.PIPELINE_LOCAL_TIME_ZONE),
@@ -78,7 +80,8 @@ public class CanalJsonFormatFactory implements FormatFactory {
                 mapNullKeyMode,
                 mapNullKeyLiteral,
                 zoneId,
-                encodeDecimalAsPlainNumber);
+                encodeDecimalAsPlainNumber,
+                ignoreNullFields);
     }
 
     @Override
