@@ -273,6 +273,7 @@ limitations under the License.
                             <artifactSet>
                                 <includes>
                                     <include>org.apache.paimon:*</include>
+                                    <include>org.apache.flink.table.catalog:*</include>
                                 </includes>
                             </artifactSet>
                             <relocations>
