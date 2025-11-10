@@ -344,7 +344,7 @@ class PaimonWriterHelperTest {
                 new File(temporaryFolder.toFile(), UUID.randomUUID().toString()).toString();
         catalogOptions.setString("warehouse", warehouse);
         catalogOptions.setString("cache-enabled", "false");
-        PaimonMetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions);
+        PaimonMetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions, false);
         Schema allTypeSchema =
                 Schema.newBuilder()
                         .physicalColumn("col1", DataTypes.STRING().notNull())

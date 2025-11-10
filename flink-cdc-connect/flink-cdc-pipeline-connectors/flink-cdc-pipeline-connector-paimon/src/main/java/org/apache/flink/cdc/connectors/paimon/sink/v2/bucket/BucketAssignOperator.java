@@ -160,18 +160,16 @@ public class BucketAssignOperator extends AbstractStreamOperator<Event>
             }
         } else if (event instanceof DataChangeEvent) {
             DataChangeEvent dataChangeEvent = convertDataChangeEvent((DataChangeEvent) event);
-            return;
-        }
-
-        if (event instanceof DataChangeEvent) {
-            DataChangeEvent dataChangeEvent = (DataChangeEvent) event;
             if (!schemaMaps.containsKey(dataChangeEvent.tableId())) {
                 Optional<Schema> schema =
                         schemaEvolutionClient.getLatestEvolvedSchema(dataChangeEvent.tableId());
                 if (schema.isPresent()) {
                     schemaMaps.put(
                             dataChangeEvent.tableId(),
-                            new TableSchemaInfo(schema.get(), zoneId, timeStampLtzToTimeStamp));
+                            new MixedSchemaInfo(
+                                    new TableSchemaInfo(null, zoneId, timeStampLtzToTimeStamp),
+                                    new TableSchemaInfo(
+                                            schema.get(), zoneId, timeStampLtzToTimeStamp)));
                 } else {
                     throw new RuntimeException(
                             "Could not find schema message from SchemaRegistry for "
@@ -218,18 +216,6 @@ public class BucketAssignOperator extends AbstractStreamOperator<Event>
             output.collect(
                     new StreamRecord<>(new BucketWrapperChangeEvent(bucket, dataChangeEvent)));
         } else {
-                    new StreamRecord<>(new BucketWrapperChangeEvent(bucket, (ChangeEvent) event));
-        } else if (event instanceof SchemaChangeEvent) {
-            SchemaChangeEvent schemaChangeEvent = (SchemaChangeEvent) event;
-            Schema schema =
-                    SchemaUtils.applySchemaChangeEvent(
-                            Optional.ofNullable(schemaMaps.get(schemaChangeEvent.tableId()))
-                                    .map(TableSchemaInfo::getSchema)
-                                    .orElse(null),
-                            schemaChangeEvent);
-            schemaMaps.put(
-                    schemaChangeEvent.tableId(),
-                    new TableSchemaInfo(schema, zoneId, timeStampLtzToTimeStamp));
             // Broadcast SchemachangeEvent.
             for (int index = 0; index < totalTasksNumber; index++) {
                 output.collect(
@@ -267,8 +253,8 @@ public class BucketAssignOperator extends AbstractStreamOperator<Event>
                         catalog.getTable(PaimonWriterHelper.identifierFromTableId(tableId)));
         MixedSchemaInfo mixedSchemaInfo =
                 new MixedSchemaInfo(
-                        new TableSchemaInfo(upstreamSchema, zoneId),
-                        new TableSchemaInfo(physicalSchema, zoneId));
+                        new TableSchemaInfo(upstreamSchema, zoneId, timeStampLtzToTimeStamp),
+                        new TableSchemaInfo(physicalSchema, zoneId, timeStampLtzToTimeStamp));
         if (!mixedSchemaInfo.isSameColumnsIgnoringCommentAndDefaultValue()) {
             LOGGER.warn(
                     "Upstream schema of {} is {}, which is different with paimon physical table schema {}. Data precision loss and truncation may occur.",
@@ -295,13 +281,14 @@ public class BucketAssignOperator extends AbstractStreamOperator<Event>
             if (schema.isPresent()) {
                 MixedSchemaInfo mixedSchemaInfo =
                         new MixedSchemaInfo(
-                                new TableSchemaInfo(schema.get(), zoneId),
+                                new TableSchemaInfo(schema.get(), zoneId, timeStampLtzToTimeStamp),
                                 new TableSchemaInfo(
                                         PaimonWriterHelper.deduceSchemaForPaimonTable(
                                                 catalog.getTable(
                                                         PaimonWriterHelper.identifierFromTableId(
                                                                 tableId))),
-                                        zoneId));
+                                        zoneId,
+                                        timeStampLtzToTimeStamp));
                 if (!mixedSchemaInfo.isSameColumnsIgnoringCommentAndDefaultValue()) {
                     LOGGER.warn(
                             "Upstream schema of {} is {}, which is different with paimon physical table schema {}. Data precision loss and truncation may occur.",

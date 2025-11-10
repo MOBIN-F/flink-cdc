@@ -216,14 +216,14 @@ public class PaimonSinkITCase {
                         .build();
         CreateTableEvent createTableEvent = new CreateTableEvent(table1, schema);
         testEvents.add(createTableEvent);
-        PaimonMetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions);
+        PaimonMetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions, false);
         if (schemaChange != null) {
             metadataApplier.applySchemaChange(
                     new CreateTableEvent(table1, generateRandomSchema(schema, schemaChange)));
         } else {
             metadataApplier.applySchemaChange(createTableEvent);
         }
-        PaimonMetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions, false);
+        metadataApplier = new PaimonMetadataApplier(catalogOptions, false);
         metadataApplier.applySchemaChange(createTableEvent);
 
         // insert
@@ -513,11 +513,12 @@ public class PaimonSinkITCase {
         initialize("filesystem");
         PaimonSink<Event> paimonSink =
                 new PaimonSink<>(
-                        catalogOptions, new PaimonRecordEventSerializer(ZoneId.systemDefault()));
+                        catalogOptions,
+                        new PaimonRecordEventSerializer(ZoneId.systemDefault(), false));
         PaimonWriter<Event> writer = paimonSink.createWriter(new MockInitContext());
         Committer<MultiTableCommittable> committer = paimonSink.createCommitter();
         BucketAssignOperator bucketAssignOperator =
-                new BucketAssignOperator(catalogOptions, null, ZoneId.systemDefault(), null);
+                new BucketAssignOperator(catalogOptions, null, ZoneId.systemDefault(), null, false);
         SchemaEvolutionClient schemaEvolutionClient = Mockito.mock(SchemaEvolutionClient.class);
         Mockito.when(schemaEvolutionClient.getLatestEvolvedSchema(Mockito.any()))
                 .thenReturn(Optional.empty());
@@ -577,7 +578,7 @@ public class PaimonSinkITCase {
                 new AddColumnEvent.ColumnWithPosition(Column.physicalColumn("col3", STRING()));
         AddColumnEvent addColumnEvent =
                 new AddColumnEvent(table1, Collections.singletonList(columnWithPosition));
-        PaimonMetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions);
+        PaimonMetadataApplier metadataApplier = new PaimonMetadataApplier(catalogOptions, false);
         metadataApplier.applySchemaChange(addColumnEvent);
         writer.write(bucketAssignOperator.convertSchemaChangeEvent(addColumnEvent), null);
 
