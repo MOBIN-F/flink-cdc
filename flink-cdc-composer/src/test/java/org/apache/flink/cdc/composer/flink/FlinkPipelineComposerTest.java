@@ -142,7 +142,8 @@ class FlinkPipelineComposerTest {
 
         Assertions.assertThat(configuration.get(CHECKPOINTING_INTERVAL))
                 .isEqualTo(Duration.ofSeconds(30));
-        Assertions.assertThat(configuration.get(PipelineOptions.JARS))
+        Assertions.assertThat(
+                        configuration.get(org.apache.flink.configuration.PipelineOptions.JARS))
                 .contains("file:/path/to/additionalJars.jar");
     }
 }
