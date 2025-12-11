@@ -38,7 +38,7 @@ limitations under the License.
         <paimon.version>1.2.0</paimon.version>
         <flink.release.download.skip>false</flink.release.download.skip>
         <flink.release.name>flink-${flink.version}-bin-scala_${scala.binary.version}.tgz</flink.release.name>
-        <flink.release.mirror>https://archive.apache.org/dist/flink/flink-${flink.version}</flink.release.mirror>
+        <flink.release.mirror>https://dlcdn.apache.org/flink/flink-${flink.version}</flink.release.mirror>
         <maven.plugin.download.version>1.6.8</maven.plugin.download.version>
         <iceberg.version>1.6.1</iceberg.version>
         <hive.version>2.3.9</hive.version>
