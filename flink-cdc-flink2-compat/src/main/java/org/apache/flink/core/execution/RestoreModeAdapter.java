@@ -42,7 +42,7 @@ public final class RestoreModeAdapter {
 
     public static void setRestoreMode(Configuration configuration, Object restoreMode) {
 
-        configuration.set(StateRecoveryOptions.RESTORE_MODE, convert((RestoreMode) restoreMode));
+        configuration.set(StateRecoveryOptions.RESTORE_MODE, convert((RecoveryClaimMode) restoreMode));
     }
 
     public static void setSavepointIgnoreUnclaimedState(
@@ -73,7 +73,7 @@ public final class RestoreModeAdapter {
                 .orElse(StateRecoveryOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE.defaultValue());
     }
 
-    private static RecoveryClaimMode convert(RestoreMode restoreMode) {
+    private static RecoveryClaimMode convert(RecoveryClaimMode restoreMode) {
         switch (restoreMode) {
             case CLAIM:
                 return RecoveryClaimMode.CLAIM;
