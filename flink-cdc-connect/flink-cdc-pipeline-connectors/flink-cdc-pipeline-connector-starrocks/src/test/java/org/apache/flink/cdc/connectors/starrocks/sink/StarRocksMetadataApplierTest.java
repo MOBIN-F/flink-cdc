@@ -19,11 +19,14 @@ package org.apache.flink.cdc.connectors.starrocks.sink;
 
 import org.apache.flink.cdc.common.configuration.Configuration;
 import org.apache.flink.cdc.common.event.AddColumnEvent;
+import org.apache.flink.cdc.common.event.AlterColumnTypeEvent;
 import org.apache.flink.cdc.common.event.CreateTableEvent;
 import org.apache.flink.cdc.common.event.DropColumnEvent;
 import org.apache.flink.cdc.common.event.TableId;
+import org.apache.flink.cdc.common.exceptions.SchemaEvolveException;
 import org.apache.flink.cdc.common.schema.Column;
 import org.apache.flink.cdc.common.schema.Schema;
+import org.apache.flink.cdc.common.types.BigIntType;
 import org.apache.flink.cdc.common.types.BooleanType;
 import org.apache.flink.cdc.common.types.DecimalType;
 import org.apache.flink.cdc.common.types.IntType;
@@ -183,6 +186,69 @@ class StarRocksMetadataApplierTest {
                         .setTableProperties(Collections.singletonMap("replication_num", "5"))
                         .build();
         Assertions.assertThat(actualTable).isEqualTo(expectTable);
+    }
+
+    @Test
+    void testReplayHistoricalSchemaAgainstWiderExistingTable() {
+        TableId tableId = TableId.parse("test.replay_tbl");
+        Schema currentSchema =
+                Schema.newBuilder()
+                        .physicalColumn("id", new BigIntType(false))
+                        .physicalColumn("new_col", new IntType())
+                        .primaryKey("id")
+                        .build();
+        metadataApplier.applySchemaChange(new CreateTableEvent(tableId, currentSchema));
+
+        Schema historicalSchema =
+                Schema.newBuilder()
+                        .physicalColumn("id", new IntType(false))
+                        .primaryKey("id")
+                        .build();
+        metadataApplier.applySchemaChange(new CreateTableEvent(tableId, historicalSchema));
+        metadataApplier.applySchemaChange(
+                new AddColumnEvent(
+                        tableId,
+                        Collections.singletonList(
+                                new AddColumnEvent.ColumnWithPosition(
+                                        Column.physicalColumn("new_col", new IntType())))));
+        metadataApplier.applySchemaChange(
+                new AlterColumnTypeEvent(
+                        tableId, Collections.singletonMap("id", new BigIntType(false))));
+
+        StarRocksTable actualTable =
+                catalog.getTable(tableId.getSchemaName(), tableId.getTableName()).orElse(null);
+        Assertions.assertThat(actualTable).isNotNull();
+        Assertions.assertThat(actualTable.getColumn("id").getDataType())
+                .isEqualToIgnoringCase("bigint");
+        Assertions.assertThat(actualTable.getColumn("new_col")).isNotNull();
+    }
+
+    @Test
+    void testRejectReplayWhenPrimaryKeysDiffer() {
+        TableId tableId = TableId.parse("test.incompatible_replay_tbl");
+        Schema currentSchema =
+                Schema.newBuilder()
+                        .physicalColumn("id", new IntType(false))
+                        .physicalColumn("other_id", new IntType(false))
+                        .primaryKey("other_id")
+                        .build();
+        metadataApplier.applySchemaChange(new CreateTableEvent(tableId, currentSchema));
+
+        Schema historicalSchema =
+                Schema.newBuilder()
+                        .physicalColumn("id", new IntType(false))
+                        .primaryKey("id")
+                        .build();
+
+        Assertions.assertThatThrownBy(
+                        () ->
+                                metadataApplier.applySchemaChange(
+                                        new CreateTableEvent(tableId, historicalSchema)))
+                .isInstanceOfSatisfying(
+                        SchemaEvolveException.class,
+                        exception ->
+                                Assertions.assertThat(exception.getExceptionMessage())
+                                        .contains("primary keys"));
     }
 
     @Test

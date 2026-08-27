@@ -26,12 +26,59 @@ under the License.
 
 # Kafka Pipeline 连接器
 
-Kafka Pipeline 连接器可以用作 Pipeline 的 *Data Sink*，将数据写入[Kafka](https://kafka.apache.org)。 本文档介绍如何设置 Kafka Pipeline 连接器。
+Kafka Pipeline 连接器可以用作 Pipeline 的 *Data Source* 或 *Data Sink*。作为 Source 时，它消费包含 Kafka Connect Schema 的 Debezium JSON，并将推断出的表结构变化转换为 Pipeline Schema 事件。
 
 ## 连接器的功能
 * 自动建表
 * 表结构变更同步
 * 数据实时同步
+* 消费 Debezium JSON Changelog
+
+Kafka Source
+----------------
+
+下面的 Pipeline 从 Kafka 多分区消费 Debezium JSON，并写入 StarRocks：
+
+```yaml
+source:
+  type: kafka
+  name: Kafka Debezium Source
+  topic: inventory.customers
+  group-id: flink-cdc-kafka-source
+  scan.startup.mode: group-offsets
+  properties.bootstrap.servers: localhost:9092
+
+sink:
+  type: starrocks
+  name: StarRocks Sink
+  jdbc-url: jdbc:mysql://localhost:9030
+  load-url: localhost:8030
+  username: root
+  password: ""
+
+pipeline:
+  name: Kafka to StarRocks Pipeline
+  parallelism: 4
+  schema.change.behavior: lenient
+```
+
+Kafka Source 配置项：
+
+* `topic`：单个 Topic 或逗号分隔的 Topic 列表。
+* `topic-pattern`：用于动态发现 Topic 的正则表达式；`topic` 与 `topic-pattern` 必须且只能配置一个。
+* `group-id`（未配置 `properties.group.id` 时必填）：Kafka Consumer Group。
+* `scan.startup.mode`：`group-offsets`（默认）、`earliest-offset` 或 `latest-offset`。
+* `properties.bootstrap.servers`（必填）及 `properties.*`：Kafka Consumer 参数。
+
+Kafka key 和 value 必须使用同时包含 `schema` 与 `payload` 的 Debezium JSON。Source 使用 key schema 推断主键。不包含 schema 的 value 无法可靠识别字段类型变化，因此会被拒绝。
+
+### Schema Evolution 与多分区
+
+Kafka 只保证分区内有序。Source 会先在每个 Source subtask 内对其负责分区的 schema 做单调扩宽，再由 distributed schema coordinator 跨 subtask 合并。新 schema 出现后到达的旧格式消息会被转换到当前最宽 schema，不会触发类型回退。
+
+Source 支持首次发现表时建表、增加 nullable 字段，以及 `INT → BIGINT`、字符串/Decimal 容量扩大等兼容扩宽。类型缩窄、不兼容类型变化、主键变化、删列和改名会明确失败。并行 Kafka Source 应配置 `schema.change.behavior: lenient`。
+
+从旧 offset 重刷时，空目标表会按历史顺序执行 `CREATE → ADD/ALTER`。已有 StarRocks 表必须是历史 schema 的兼容超集；重复的 Create/Add/Alter 会按幂等方式处理，目标表额外字段必须 nullable 或有默认值。StarRocks 主键表可以通过 upsert 覆盖旧记录；duplicate-key 表全量重刷前应清表或改写新表。
 
 如何创建 Pipeline
 ----------------

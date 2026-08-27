@@ -26,10 +26,64 @@ under the License.
 
 # Kafka Pipeline Connector
 
-The Kafka Pipeline connector can be used as the *Data Sink* of the pipeline, and write data to [Kafka](https://kafka.apache.org). This document describes how to set up the Kafka Pipeline connector.
+The Kafka Pipeline connector can be used as a *Data Source* or *Data Sink* of the pipeline. As a source, it consumes Debezium JSON records with embedded Kafka Connect schemas and converts inferred schema changes into pipeline schema events.
 
 ## What can the connector do?
 * Data synchronization
+* Consume Debezium JSON changelog records
+* Infer create table, add column, and compatible column type widening events
+
+Kafka Source
+----------------
+
+The following pipeline consumes Debezium JSON from multiple Kafka partitions and writes it to StarRocks:
+
+```yaml
+source:
+  type: kafka
+  name: Kafka Debezium Source
+  topic: inventory.customers
+  group-id: flink-cdc-kafka-source
+  scan.startup.mode: group-offsets
+  properties.bootstrap.servers: localhost:9092
+
+sink:
+  type: starrocks
+  name: StarRocks Sink
+  jdbc-url: jdbc:mysql://localhost:9030
+  load-url: localhost:8030
+  username: root
+  password: ""
+
+pipeline:
+  name: Kafka to StarRocks Pipeline
+  parallelism: 4
+  schema.change.behavior: lenient
+```
+
+Kafka source options:
+
+* `topic`: one topic or a comma-separated topic list.
+* `topic-pattern`: a regular expression for discovering topics. Configure exactly one of `topic` and `topic-pattern`.
+* `group-id` (required unless `properties.group.id` is set): Kafka consumer group.
+* `scan.startup.mode`: `group-offsets` (default), `earliest-offset`, or `latest-offset`.
+* `properties.bootstrap.servers` (required) and `properties.*`: Kafka consumer properties.
+
+The Kafka key and value must use Debezium JSON with the `schema` and `payload` fields. The key schema is used to infer primary keys. Values without an embedded schema cannot reliably describe column type changes and are rejected.
+
+### Schema evolution and multiple partitions
+
+Kafka only guarantees ordering within a partition. The source therefore merges schemas monotonically across the partitions assigned to each source subtask and the distributed schema coordinator merges them again across subtasks. Old records arriving after a newer schema are converted to the widest known schema instead of reverting it.
+
+The source supports:
+
+* creating a table from the first record seen for a table;
+* adding nullable columns;
+* compatible type widening, such as `INT` to `BIGINT` or increasing string/decimal capacity.
+
+Narrowing types, incompatible type changes, primary-key changes, dropping columns, and renaming columns fail explicitly. Use `schema.change.behavior: lenient` for a parallel Kafka source.
+
+When replaying from an old offset, an empty target table follows the historical `CREATE → ADD/ALTER` sequence. An existing StarRocks table must be a compatible superset. Replayed create/add/alter operations are idempotent; extra target columns must be nullable or have defaults. Replaying rows is safe for primary-key tables through upserts. Duplicate-key tables should be cleared or replaced before a full replay.
 
 How to create Pipeline
 ----------------
