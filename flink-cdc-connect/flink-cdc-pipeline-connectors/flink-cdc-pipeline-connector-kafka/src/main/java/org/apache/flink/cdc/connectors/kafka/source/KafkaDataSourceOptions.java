@@ -44,6 +44,20 @@ public class KafkaDataSourceOptions {
                     .noDefaultValue()
                     .withDescription("Kafka consumer group id.");
 
+    public static final ConfigOption<String> PRIMARY_KEYS =
+            key("primary-keys")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Comma-separated primary key columns used for all tables when no table-specific mapping is configured.");
+
+    public static final ConfigOption<String> PRIMARY_KEYS_MAPPING =
+            key("primary-keys.mapping")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Table-specific primary keys in 'database.table:key1,key2;database.table:key' format.");
+
     public static final ConfigOption<String> SCAN_STARTUP_MODE =
             key("scan.startup.mode")
                     .stringType()

@@ -112,6 +112,7 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
                                 + "  topic: %s\n"
                                 + "  group-id: %s\n"
                                 + "  scan.startup.mode: earliest-offset\n"
+                                + "  primary-keys: id\n"
                                 + "  properties.bootstrap.servers: %s:9092\n"
                                 + "\n"
                                 + "sink:\n"
@@ -132,13 +133,13 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
 
         send(
                 1,
-                key("int64", 2147483648L),
+                null,
                 value(
                         newFields(),
                         "{\"id\":2147483648,\"name\":\"new\",\"email\":\"new@example.com\"}"));
         waitForRows(1);
 
-        send(0, key("int32", 2), value(oldFields(), "{\"id\":2,\"name\":\"old\"}"));
+        send(0, null, value(oldFields(), "{\"id\":2,\"name\":\"old\"}"));
         waitForRows(2);
 
         try (Connection connection = STARROCKS_CONTAINER.createConnection(DATABASE);
@@ -223,15 +224,6 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
         Properties properties = new Properties();
         properties.setProperty("bootstrap.servers", KAFKA_CONTAINER.getBootstrapServers());
         return properties;
-    }
-
-    private static byte[] key(String type, long id) {
-        return bytes(
-                "{\"schema\":{\"type\":\"struct\",\"fields\":[{\"type\":\""
-                        + type
-                        + "\",\"optional\":false,\"field\":\"id\"}]},\"payload\":{\"id\":"
-                        + id
-                        + "}}");
     }
 
     private static byte[] value(String fields, String row) {

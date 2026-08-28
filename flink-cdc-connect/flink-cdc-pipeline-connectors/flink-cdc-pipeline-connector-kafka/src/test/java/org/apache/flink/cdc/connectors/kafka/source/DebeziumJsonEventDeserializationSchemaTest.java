@@ -18,12 +18,12 @@
 package org.apache.flink.cdc.connectors.kafka.source;
 
 import org.apache.flink.cdc.common.data.RecordData;
-import org.apache.flink.cdc.common.event.AddColumnEvent;
 import org.apache.flink.cdc.common.event.AlterColumnTypeEvent;
 import org.apache.flink.cdc.common.event.CreateTableEvent;
 import org.apache.flink.cdc.common.event.DataChangeEvent;
 import org.apache.flink.cdc.common.event.Event;
 import org.apache.flink.cdc.common.event.OperationType;
+import org.apache.flink.cdc.common.event.TableId;
 import org.apache.flink.cdc.common.types.DataTypeRoot;
 import org.apache.flink.cdc.common.types.DataTypes;
 import org.apache.flink.util.Collector;
@@ -34,6 +34,8 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /** Tests for {@link DebeziumJsonEventDeserializationSchema}. */
@@ -118,14 +120,14 @@ class DebeziumJsonEventDeserializationSchemaTest {
                 record(0, 2, KEY, value(oldFields, "c", "null", row(2, "Carol"))), collector);
 
         Assertions.assertThat(collector.events)
-                .extracting(Object::getClass)
+                .extracting(event -> event.getClass().getSimpleName())
                 .containsExactly(
-                        CreateTableEvent.class,
-                        DataChangeEvent.class,
-                        AddColumnEvent.class,
-                        AlterColumnTypeEvent.class,
-                        DataChangeEvent.class,
-                        DataChangeEvent.class);
+                        "CreateTableEvent",
+                        "DataChangeEvent",
+                        "AddColumnEvent",
+                        "AlterColumnTypeEvent",
+                        "DataChangeEvent",
+                        "DataChangeEvent");
         AlterColumnTypeEvent alter = (AlterColumnTypeEvent) collector.events.get(3);
         Assertions.assertThat(alter.getTypeMapping().get("id").getTypeRoot())
                 .isEqualTo(DataTypeRoot.BIGINT);
@@ -164,9 +166,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
                 record(0, 1, KEY, value(oldFields, "c", "null", row(2, "Carol"))), collector);
 
         Assertions.assertThat(collector.events)
-                .extracting(Object::getClass)
-                .containsExactly(
-                        CreateTableEvent.class, DataChangeEvent.class, DataChangeEvent.class);
+                .extracting(event -> event.getClass().getSimpleName())
+                .containsExactly("CreateTableEvent", "DataChangeEvent", "DataChangeEvent");
         RecordData converted = ((DataChangeEvent) collector.events.get(2)).after();
         Assertions.assertThat(converted.getArity()).isEqualTo(3);
         Assertions.assertThat(converted.getLong(0)).isEqualTo(2L);
@@ -223,6 +224,83 @@ class DebeziumJsonEventDeserializationSchemaTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("at least one schema field")
                 .hasMessageContaining("@2");
+    }
+
+    @Test
+    void testConfiguredGlobalPrimaryKeyAllowsMissingKafkaKey() throws Exception {
+        DebeziumJsonEventDeserializationSchema deserializer =
+                new DebeziumJsonEventDeserializationSchema(
+                        Collections.singletonList("id"), Collections.emptyMap());
+        TestCollector collector = new TestCollector();
+
+        deserializer.deserialize(
+                record(
+                        0,
+                        1,
+                        null,
+                        value(
+                                field("int32", "id", false) + "," + field("string", "name", true),
+                                "c",
+                                "null",
+                                row(1, "Alice"))),
+                collector);
+
+        Assertions.assertThat(
+                        ((CreateTableEvent) collector.events.get(0)).getSchema().primaryKeys())
+                .containsExactly("id");
+    }
+
+    @Test
+    void testTablePrimaryKeysOverrideGlobalAndKafkaKey() throws Exception {
+        TableId tableId = TableId.parse("inventory.customers");
+        DebeziumJsonEventDeserializationSchema deserializer =
+                new DebeziumJsonEventDeserializationSchema(
+                        Collections.singletonList("global_id"),
+                        Collections.singletonMap(tableId, Arrays.asList("tenant_id", "id")));
+        TestCollector collector = new TestCollector();
+        String fields =
+                field("int32", "id", false)
+                        + ","
+                        + field("int32", "tenant_id", false)
+                        + ","
+                        + field("int32", "global_id", false);
+
+        deserializer.deserialize(
+                record(
+                        0,
+                        1,
+                        KEY,
+                        value(fields, "c", "null", "{\"id\":1,\"tenant_id\":2,\"global_id\":3}")),
+                collector);
+
+        Assertions.assertThat(
+                        ((CreateTableEvent) collector.events.get(0)).getSchema().primaryKeys())
+                .containsExactly("tenant_id", "id");
+    }
+
+    @Test
+    void testConfiguredPrimaryKeyMustExistInRowSchema() {
+        DebeziumJsonEventDeserializationSchema deserializer =
+                new DebeziumJsonEventDeserializationSchema(
+                        Collections.singletonList("missing_id"), Collections.emptyMap());
+
+        Assertions.assertThatThrownBy(
+                        () ->
+                                deserializer.deserialize(
+                                        record(
+                                                0,
+                                                1,
+                                                null,
+                                                value(
+                                                        field("int32", "id", false),
+                                                        "c",
+                                                        "null",
+                                                        "{\"id\":1}")),
+                                        new TestCollector()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(
+                        "primary key column 'missing_id' does not exist in row schema")
+                .hasMessageContaining("@1");
     }
 
     @Test

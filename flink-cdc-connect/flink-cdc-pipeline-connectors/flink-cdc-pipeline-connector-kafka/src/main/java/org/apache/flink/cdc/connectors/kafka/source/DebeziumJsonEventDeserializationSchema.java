@@ -70,9 +70,25 @@ public class DebeziumJsonEventDeserializationSchema
 
     private static final long serialVersionUID = 1L;
 
+    private final List<String> configuredPrimaryKeys;
+    private final Map<TableId, List<String>> configuredPrimaryKeysMapping;
+
     private transient ObjectMapper mapper;
     private transient Map<TableId, TableSchemaState> globalTableSchemas;
     private transient Map<PartitionTableKey, Schema> partitionTableSchemas;
+
+    public DebeziumJsonEventDeserializationSchema() {
+        this(new ArrayList<>(), new HashMap<>());
+    }
+
+    DebeziumJsonEventDeserializationSchema(
+            List<String> primaryKeys, Map<TableId, List<String>> primaryKeysMapping) {
+        this.configuredPrimaryKeys = new ArrayList<>(primaryKeys);
+        this.configuredPrimaryKeysMapping = new HashMap<>();
+        primaryKeysMapping.forEach(
+                (tableId, keys) ->
+                        this.configuredPrimaryKeysMapping.put(tableId, new ArrayList<>(keys)));
+    }
 
     @Override
     public void open(DeserializationSchema.InitializationContext context) {
@@ -116,7 +132,7 @@ public class DebeziumJsonEventDeserializationSchema
             throw failure(record, "Debezium value does not contain a before/after row schema.");
         }
 
-        List<String> primaryKeys = parsePrimaryKeys(record);
+        List<String> primaryKeys = resolvePrimaryKeys(record, tableId, rowSchemaNode);
         Schema incomingSchema = parseSchema(rowSchemaNode, primaryKeys);
         PartitionTableKey partitionTableKey =
                 new PartitionTableKey(record.topic(), record.partition(), tableId);
@@ -180,7 +196,23 @@ public class DebeziumJsonEventDeserializationSchema
         }
     }
 
-    private List<String> parsePrimaryKeys(ConsumerRecord<byte[], byte[]> record)
+    private List<String> resolvePrimaryKeys(
+            ConsumerRecord<byte[], byte[]> record, TableId tableId, JsonNode rowSchema)
+            throws IOException {
+        List<String> tablePrimaryKeys = configuredPrimaryKeysMapping.get(tableId);
+        List<String> primaryKeys;
+        if (tablePrimaryKeys != null) {
+            primaryKeys = tablePrimaryKeys;
+        } else if (!configuredPrimaryKeys.isEmpty()) {
+            primaryKeys = configuredPrimaryKeys;
+        } else {
+            primaryKeys = parsePrimaryKeysFromKey(record);
+        }
+        validatePrimaryKeyColumns(record, tableId, rowSchema, primaryKeys);
+        return primaryKeys;
+    }
+
+    private List<String> parsePrimaryKeysFromKey(ConsumerRecord<byte[], byte[]> record)
             throws IOException {
         if (record.key() == null) {
             throw failure(
@@ -195,9 +227,37 @@ public class DebeziumJsonEventDeserializationSchema
         }
         List<String> keys = new ArrayList<>();
         for (JsonNode field : fields) {
-            keys.add(requiredText(field, "field", "Debezium key schema field"));
+            String key = requiredText(field, "field", "Debezium key schema field");
+            if (keys.contains(key)) {
+                throw failure(
+                        record,
+                        "Debezium key schema contains duplicate primary key column '" + key + "'.");
+            }
+            keys.add(key);
         }
         return keys;
+    }
+
+    private void validatePrimaryKeyColumns(
+            ConsumerRecord<byte[], byte[]> record,
+            TableId tableId,
+            JsonNode rowSchema,
+            List<String> primaryKeys) {
+        List<String> rowColumns = new ArrayList<>();
+        for (JsonNode field : rowSchema.path("fields")) {
+            rowColumns.add(requiredText(field, "field", "Debezium row schema field"));
+        }
+        for (String primaryKey : primaryKeys) {
+            if (!rowColumns.contains(primaryKey)) {
+                throw failure(
+                        record,
+                        "Configured or inferred primary key column '"
+                                + primaryKey
+                                + "' does not exist in row schema for "
+                                + tableId
+                                + ".");
+            }
+        }
     }
 
     private Schema parseSchema(JsonNode rowSchema, List<String> primaryKeys) {
