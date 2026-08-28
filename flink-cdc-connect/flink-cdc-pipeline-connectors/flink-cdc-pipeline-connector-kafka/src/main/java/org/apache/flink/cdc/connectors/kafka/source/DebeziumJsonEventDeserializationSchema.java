@@ -64,7 +64,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Converts schema-enabled Debezium JSON Kafka records into pipeline events. */
+/** Converts schema-enabled Debezium JSON kafka records into pipeline events. */
 public class DebeziumJsonEventDeserializationSchema
         implements KafkaRecordDeserializationSchema<Event> {
 
