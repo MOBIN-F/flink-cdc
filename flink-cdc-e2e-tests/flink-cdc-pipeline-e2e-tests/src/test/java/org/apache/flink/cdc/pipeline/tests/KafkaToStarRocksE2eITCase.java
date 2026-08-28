@@ -44,8 +44,11 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import static org.apache.flink.util.DockerImageVersions.KAFKA;
@@ -74,6 +77,7 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
     private AdminClient admin;
     private KafkaProducer<byte[], byte[]> producer;
     private String topic;
+    private String table;
 
     @BeforeAll
     static void startExternalSystems() throws Exception {
@@ -86,6 +90,7 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
     @BeforeEach
     void setUpKafka() throws Exception {
         topic = "debezium-customers-" + UUID.randomUUID();
+        table = "customers_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
         Properties properties = kafkaProperties();
         admin = AdminClient.create(properties);
         admin.createTopics(Collections.singletonList(new NewTopic(topic, 2, (short) 1)))
@@ -101,10 +106,109 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
         producer.close();
         admin.deleteTopics(Collections.singletonList(topic));
         admin.close();
+        dropTableQuietly();
+    }
+
+    @Test
+    void testCreateTableAddColumnAndModifyColumnEvents() throws Exception {
+        submitPipeline();
+
+        // CreateTableEvent: first record infers the initial table schema.
+        send(0, value(createFields(), "{\"id\":1,\"name\":\"alice\",\"age\":18}"));
+        waitForSchemaEvent("CreateTableEvent{tableId=" + tableId());
+        waitForStarRocksSchema(
+                types ->
+                        hasType(types, "id", "int")
+                                && hasType(types, "name", "varchar")
+                                && hasType(types, "age", "int")
+                                && !types.containsKey("email"),
+                "CreateTableEvent to create id/name/age without email");
+        waitForRows(1);
+        assertThat(varcharLength(describeTypes().get("name"))).isLessThan(128);
+
+        // AddColumnEvent: a later record introduces a new nullable column.
+        send(
+                0,
+                value(
+                        addColumnFields(),
+                        "{\"id\":2,\"name\":\"bob\",\"age\":21,\"email\":\"bob@example.com\"}"));
+        waitForSchemaEvent("AddColumnEvent{tableId=" + tableId());
+        waitForStarRocksSchema(
+                types -> types.containsKey("email") && hasType(types, "age", "int"),
+                "AddColumnEvent to add email without changing age yet");
+        waitForRows(2);
+
+        // AlterColumnTypeEvent: a later record widens existing column types.
+        send(
+                0,
+                value(
+                        modifyColumnFields(),
+                        "{\"id\":3,\"name\":\"charlie\",\"age\":2147483648,\"email\":\"charlie@example.com\"}"));
+        waitForSchemaEvent("AlterColumnTypeEvent{tableId=" + tableId());
+        waitForStarRocksSchema(
+                types -> hasType(types, "age", "bigint") && varcharLength(types.get("name")) >= 128,
+                "AlterColumnTypeEvent to widen age to BIGINT and name length");
+        waitForRows(3);
+
+        try (Connection connection = STARROCKS_CONTAINER.createConnection("");
+                Statement statement = connection.createStatement();
+                ResultSet rows =
+                        statement.executeQuery(
+                                "SELECT id, name, age, email FROM "
+                                        + qualifiedTable()
+                                        + " ORDER BY id")) {
+            assertThat(rows.next()).isTrue();
+            assertThat(rows.getLong(1)).isEqualTo(1L);
+            assertThat(rows.getString(2)).isEqualTo("alice");
+            assertThat(rows.getLong(3)).isEqualTo(18L);
+            assertThat(rows.getString(4)).isNull();
+            assertThat(rows.next()).isTrue();
+            assertThat(rows.getString(2)).isEqualTo("bob");
+            assertThat(rows.getString(4)).isEqualTo("bob@example.com");
+            assertThat(rows.next()).isTrue();
+            assertThat(rows.getLong(3)).isEqualTo(2147483648L);
+            assertThat(rows.getString(4)).isEqualTo("charlie@example.com");
+            assertThat(rows.next()).isFalse();
+        }
     }
 
     @Test
     void testNewSchemaThenHistoricalSchemaFromAnotherPartition() throws Exception {
+        submitPipeline();
+
+        send(
+                1,
+                value(
+                        newFields(),
+                        "{\"id\":2147483648,\"name\":\"new\",\"email\":\"new@example.com\"}"));
+        waitForSchemaEvent("CreateTableEvent{tableId=" + tableId());
+        waitForRows(1);
+
+        send(0, value(oldFields(), "{\"id\":2,\"name\":\"old\"}"));
+        waitForRows(2);
+
+        try (Connection connection = STARROCKS_CONTAINER.createConnection("");
+                Statement statement = connection.createStatement()) {
+            try (ResultSet rows =
+                    statement.executeQuery(
+                            "SELECT id, name, email FROM " + qualifiedTable() + " ORDER BY id")) {
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getLong(1)).isEqualTo(2L);
+                assertThat(rows.getString(2)).isEqualTo("old");
+                assertThat(rows.getString(3)).isNull();
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getLong(1)).isEqualTo(2147483648L);
+                assertThat(rows.getString(3)).isEqualTo("new@example.com");
+                assertThat(rows.next()).isFalse();
+            }
+            Map<String, String> types = describeTypes();
+            assertThat(types.get("id")).isEqualToIgnoringCase("bigint");
+            assertThat(varcharLength(types.get("name"))).isGreaterThanOrEqualTo(128L);
+            assertThat(types).containsKey("email");
+        }
+    }
+
+    private void submitPipeline() throws Exception {
         String pipelineJob =
                 String.format(
                         "source:\n"
@@ -130,68 +234,42 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
         Path starRocksJar = TestUtils.getResource("starrocks-cdc-pipeline-connector.jar");
         submitPipelineJob(pipelineJob, kafkaJar, starRocksJar);
         waitUntilJobRunning(Duration.ofSeconds(30));
-
-        send(
-                1,
-                null,
-                value(
-                        newFields(),
-                        "{\"id\":2147483648,\"name\":\"new\",\"email\":\"new@example.com\"}"));
-        waitForRows(1);
-
-        send(0, null, value(oldFields(), "{\"id\":2,\"name\":\"old\"}"));
-        waitForRows(2);
-
-        try (Connection connection = STARROCKS_CONTAINER.createConnection(DATABASE);
-                Statement statement = connection.createStatement()) {
-            try (ResultSet rows =
-                    statement.executeQuery("SELECT id, name, email FROM customers ORDER BY id")) {
-                assertThat(rows.next()).isTrue();
-                assertThat(rows.getLong(1)).isEqualTo(2L);
-                assertThat(rows.getString(2)).isEqualTo("old");
-                assertThat(rows.getString(3)).isNull();
-                assertThat(rows.next()).isTrue();
-                assertThat(rows.getLong(1)).isEqualTo(2147483648L);
-                assertThat(rows.getString(3)).isEqualTo("new@example.com");
-                assertThat(rows.next()).isFalse();
-            }
-            try (ResultSet columns =
-                    statement.executeQuery(
-                            "SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH "
-                                    + "FROM information_schema.COLUMNS "
-                                    + "WHERE TABLE_SCHEMA='inventory' AND TABLE_NAME='customers'")) {
-                boolean bigintId = false;
-                boolean widenedName = false;
-                boolean email = false;
-                while (columns.next()) {
-                    String name = columns.getString(1);
-                    if ("id".equals(name)) {
-                        bigintId = "bigint".equalsIgnoreCase(columns.getString(2));
-                    } else if ("name".equals(name)) {
-                        widenedName = columns.getLong(3) >= 128L;
-                    } else if ("email".equals(name)) {
-                        email = true;
-                    }
-                }
-                assertThat(bigintId).isTrue();
-                assertThat(widenedName).isTrue();
-                assertThat(email).isTrue();
-            }
-        }
     }
 
-    private void send(int partition, byte[] key, byte[] value) throws Exception {
-        producer.send(new ProducerRecord<>(topic, partition, key, value)).get();
+    private void send(int partition, byte[] value) throws Exception {
+        producer.send(new ProducerRecord<>(topic, partition, null, value)).get();
         producer.flush();
+    }
+
+    private void waitForSchemaEvent(String eventFragment) throws Exception {
+        waitUntilLogContains(jobManagerConsumer, eventFragment);
+    }
+
+    private void waitForStarRocksSchema(Predicate<Map<String, String>> matcher, String description)
+            throws Exception {
+        long deadline = System.currentTimeMillis() + EVENT_WAITING_TIMEOUT.toMillis();
+        Map<String, String> lastTypes = Collections.emptyMap();
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                lastTypes = describeTypes();
+                if (!lastTypes.isEmpty() && matcher.test(lastTypes)) {
+                    return;
+                }
+            } catch (Exception e) {
+                LOG.info("StarRocks schema is not ready yet for {}.", description, e);
+            }
+            Thread.sleep(1000L);
+        }
+        fail("Timed out waiting for StarRocks schema after {}: {}", description, lastTypes);
     }
 
     private void waitForRows(int expected) throws Exception {
         long deadline = System.currentTimeMillis() + EVENT_WAITING_TIMEOUT.toMillis();
         while (System.currentTimeMillis() < deadline) {
-            try (Connection connection = STARROCKS_CONTAINER.createConnection(DATABASE);
+            try (Connection connection = STARROCKS_CONTAINER.createConnection("");
                     Statement statement = connection.createStatement();
                     ResultSet resultSet =
-                            statement.executeQuery("SELECT COUNT(*) FROM customers")) {
+                            statement.executeQuery("SELECT COUNT(*) FROM " + qualifiedTable())) {
                 if (resultSet.next() && resultSet.getInt(1) == expected) {
                     return;
                 }
@@ -201,6 +279,52 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
             Thread.sleep(1000L);
         }
         fail("Timed out waiting for {} rows in StarRocks.", expected);
+    }
+
+    private Map<String, String> describeTypes() throws Exception {
+        Map<String, String> types = new LinkedHashMap<>();
+        try (Connection connection = STARROCKS_CONTAINER.createConnection("");
+                Statement statement = connection.createStatement();
+                ResultSet resultSet = statement.executeQuery("DESCRIBE " + qualifiedTable())) {
+            while (resultSet.next()) {
+                types.put(resultSet.getString(1), resultSet.getString(2));
+            }
+        }
+        return types;
+    }
+
+    private void dropTableQuietly() {
+        try (Connection connection = STARROCKS_CONTAINER.createConnection("");
+                Statement statement = connection.createStatement()) {
+            statement.execute("DROP TABLE IF EXISTS " + qualifiedTable());
+        } catch (Exception e) {
+            LOG.info("Failed to drop StarRocks table {}.", qualifiedTable(), e);
+        }
+    }
+
+    private String tableId() {
+        return DATABASE + "." + table;
+    }
+
+    private String qualifiedTable() {
+        return "`" + DATABASE + "`.`" + table + "`";
+    }
+
+    private static boolean hasType(Map<String, String> types, String column, String expected) {
+        String actual = types.get(column);
+        return actual != null && actual.toLowerCase().startsWith(expected.toLowerCase());
+    }
+
+    private static long varcharLength(String type) {
+        if (type == null) {
+            return -1L;
+        }
+        int start = type.indexOf('(');
+        int end = type.indexOf(')');
+        if (start < 0 || end <= start) {
+            return -1L;
+        }
+        return Long.parseLong(type.substring(start + 1, end));
     }
 
     private static void waitForStarRocksBackend() throws Exception {
@@ -226,11 +350,13 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
         return properties;
     }
 
-    private static byte[] value(String fields, String row) {
+    private byte[] value(String fields, String row) {
         String rowSchema =
                 "{\"type\":\"struct\",\"fields\":["
                         + fields
-                        + "],\"optional\":true,\"name\":\"inventory.customers.Value\"}";
+                        + "],\"optional\":true,\"name\":\""
+                        + tableId()
+                        + ".Value\"}";
         return bytes(
                 "{\"schema\":{\"type\":\"struct\",\"fields\":["
                         + withField(rowSchema, "before")
@@ -238,19 +364,49 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
                         + withField(rowSchema, "after")
                         + "]},\"payload\":{\"before\":null,\"after\":"
                         + row
-                        + ",\"source\":{\"db\":\"inventory\",\"table\":\"customers\"},\"op\":\"c\"}}");
+                        + ",\"source\":{\"db\":\""
+                        + DATABASE
+                        + "\",\"table\":\""
+                        + table
+                        + "\"},\"op\":\"c\"}}");
+    }
+
+    private static String createFields() {
+        return intField("id", false) + "," + stringField("name", 32) + "," + intField("age", true);
+    }
+
+    private static String addColumnFields() {
+        return createFields() + "," + stringField("email", 64);
+    }
+
+    private static String modifyColumnFields() {
+        return intField("id", false)
+                + ","
+                + stringField("name", 128)
+                + ","
+                + longField("age", true)
+                + ","
+                + stringField("email", 64);
     }
 
     private static String oldFields() {
-        return "{\"type\":\"int32\",\"optional\":false,\"field\":\"id\"},"
-                + stringField("name", 32);
+        return intField("id", false) + "," + stringField("name", 32);
     }
 
     private static String newFields() {
-        return "{\"type\":\"int64\",\"optional\":false,\"field\":\"id\"},"
+        return longField("id", false)
+                + ","
                 + stringField("name", 128)
                 + ","
                 + stringField("email", 64);
+    }
+
+    private static String intField(String name, boolean optional) {
+        return "{\"type\":\"int32\",\"optional\":" + optional + ",\"field\":\"" + name + "\"}";
+    }
+
+    private static String longField(String name, boolean optional) {
+        return "{\"type\":\"int64\",\"optional\":" + optional + ",\"field\":\"" + name + "\"}";
     }
 
     private static String stringField(String name, int length) {
