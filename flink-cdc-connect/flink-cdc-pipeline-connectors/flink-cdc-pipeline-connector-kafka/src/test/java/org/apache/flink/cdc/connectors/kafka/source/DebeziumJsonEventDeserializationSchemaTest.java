@@ -304,26 +304,18 @@ class DebeziumJsonEventDeserializationSchemaTest {
     }
 
     @Test
-    void testKafkaConnectFloatingTypesAndStringLengthWidening() throws Exception {
+    void testKafkaConnectFloatingTypesAndStringMapsToString() throws Exception {
         DebeziumJsonEventDeserializationSchema deserializer =
                 new DebeziumJsonEventDeserializationSchema();
         TestCollector collector = new TestCollector();
-        String oldFields =
+        String fields =
                 field("int32", "id", false)
                         + ","
                         + field("float", "score", true)
                         + ","
                         + field("double", "ratio", true)
                         + ","
-                        + stringFieldWithLength("name", 32);
-        String newFields =
-                field("int32", "id", false)
-                        + ","
-                        + field("float", "score", true)
-                        + ","
-                        + field("double", "ratio", true)
-                        + ","
-                        + stringFieldWithLength("name", 128);
+                        + field("string", "name", true);
 
         deserializer.deserialize(
                 record(
@@ -331,7 +323,7 @@ class DebeziumJsonEventDeserializationSchemaTest {
                         1,
                         KEY,
                         value(
-                                oldFields,
+                                fields,
                                 "c",
                                 "null",
                                 "{\"id\":1,\"score\":1.5,\"ratio\":2.5,\"name\":\"Alice\"}")),
@@ -342,7 +334,7 @@ class DebeziumJsonEventDeserializationSchemaTest {
                         2,
                         KEY,
                         value(
-                                newFields,
+                                fields,
                                 "c",
                                 "null",
                                 "{\"id\":2,\"score\":3.5,\"ratio\":4.5,\"name\":\"Bob\"}")),
@@ -350,21 +342,40 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
         CreateTableEvent createTable = (CreateTableEvent) collector.events.get(0);
         Assertions.assertThat(
-                        DataTypes.getLength(
-                                        createTable
-                                                .getSchema()
-                                                .getColumn("name")
-                                                .orElseThrow(AssertionError::new)
-                                                .getType())
-                                .orElse(-1))
-                .isEqualTo(32);
-        Assertions.assertThat(collector.events.get(2)).isInstanceOf(AlterColumnTypeEvent.class);
-        AlterColumnTypeEvent alter = (AlterColumnTypeEvent) collector.events.get(2);
-        Assertions.assertThat(DataTypes.getLength(alter.getTypeMapping().get("name")).orElse(-1))
-                .isEqualTo(128);
+                        createTable
+                                .getSchema()
+                                .getColumn("name")
+                                .orElseThrow(AssertionError::new)
+                                .getType())
+                .isEqualTo(DataTypes.STRING().nullable());
+        Assertions.assertThat(collector.events)
+                .extracting(event -> event.getClass().getSimpleName())
+                .containsExactly("CreateTableEvent", "DataChangeEvent", "DataChangeEvent");
         DataChangeEvent firstRecord = (DataChangeEvent) collector.events.get(1);
         Assertions.assertThat(firstRecord.after().getFloat(1)).isEqualTo(1.5f);
         Assertions.assertThat(firstRecord.after().getDouble(2)).isEqualTo(2.5d);
+    }
+
+    @Test
+    void testDebeziumColumnLengthParameterDoesNotCreateVarchar() throws Exception {
+        DebeziumJsonEventDeserializationSchema deserializer =
+                new DebeziumJsonEventDeserializationSchema();
+        TestCollector collector = new TestCollector();
+
+        String fields =
+                field("int32", "id", false) + "," + stringFieldWithLength("name", 32);
+        deserializer.deserialize(
+                record(0, 1, KEY, value(fields, "c", "null", "{\"id\":1,\"name\":\"Alice\"}")),
+                collector);
+
+        CreateTableEvent createTable = (CreateTableEvent) collector.events.get(0);
+        Assertions.assertThat(
+                        createTable
+                                .getSchema()
+                                .getColumn("name")
+                                .orElseThrow(AssertionError::new)
+                                .getType())
+                .isEqualTo(DataTypes.STRING().nullable());
     }
 
     private static ConsumerRecord<byte[], byte[]> record(

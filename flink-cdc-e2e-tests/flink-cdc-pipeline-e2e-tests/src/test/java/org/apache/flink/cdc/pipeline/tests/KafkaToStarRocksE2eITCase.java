@@ -131,7 +131,7 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
         validateSinkSchema(
                 Arrays.asList(
                         "id | int | NO | true | null",
-                        "name | varchar(96) | YES | false | null",
+                        "name | varchar(1048576) | YES | false | null",
                         "age | int | YES | false | null"));
         validateSinkResult(3, Collections.singletonList("1 | alice | 18"));
 
@@ -144,9 +144,9 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
         validateSinkSchema(
                 Arrays.asList(
                         "id | int | NO | true | null",
-                        "name | varchar(96) | YES | false | null",
+                        "name | varchar(1048576) | YES | false | null",
                         "age | int | YES | false | null",
-                        "email | varchar(192) | YES | false | null"));
+                        "email | varchar(1048576) | YES | false | null"));
         waitUntilStarRocksSchemaChangeIdle();
         validateSinkResult(
                 4, Arrays.asList("1 | alice | 18 | null", "2 | bob | 21 | bob@example.com"));
@@ -156,20 +156,20 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
                 0,
                 value(
                         modifyColumnFields(),
-                        "{\"id\":3,\"name\":\"charlie\",\"age\":22,\"email\":\"charlie@example.com\"}"));
+                        "{\"id\":3,\"name\":\"charlie\",\"age\":2147483648,\"email\":\"charlie@example.com\"}"));
         waitUntilStarRocksSchemaChangeIdle();
         validateSinkSchema(
                 Arrays.asList(
                         "id | int | NO | true | null",
-                        "name | varchar(384) | YES | false | null",
-                        "age | int | YES | false | null",
-                        "email | varchar(192) | YES | false | null"));
+                        "name | varchar(1048576) | YES | false | null",
+                        "age | bigint | YES | false | null",
+                        "email | varchar(1048576) | YES | false | null"));
         validateSinkResult(
                 4,
                 Arrays.asList(
                         "1 | alice | 18 | null",
                         "2 | bob | 21 | bob@example.com",
-                        "3 | charlie | 22 | charlie@example.com"));
+                        "3 | charlie | 2147483648 | charlie@example.com"));
     }
 
     @Test
@@ -188,8 +188,8 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
         validateSinkSchema(
                 Arrays.asList(
                         "id | bigint | NO | true | null",
-                        "name | varchar(384) | YES | false | null",
-                        "email | varchar(192) | YES | false | null"));
+                        "name | varchar(1048576) | YES | false | null",
+                        "email | varchar(1048576) | YES | false | null"));
         validateSinkResult(3, Collections.singletonList("2147483648 | new | new@example.com"));
 
         send(0, value(oldFields(), "{\"id\":2,\"name\":\"old\"}"));
@@ -394,33 +394,29 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
     }
 
     private static String createFields() {
-        return intField("id", false) + "," + stringField("name", 32) + "," + intField("age", true);
+        return intField("id", false) + "," + stringField("name") + "," + intField("age", true);
     }
 
     private static String addColumnFields() {
-        return createFields() + "," + stringField("email", 64);
+        return createFields() + "," + stringField("email");
     }
 
     private static String modifyColumnFields() {
         return intField("id", false)
                 + ","
-                + stringField("name", 128)
+                + stringField("name")
                 + ","
-                + intField("age", true)
+                + longField("age", true)
                 + ","
-                + stringField("email", 64);
+                + stringField("email");
     }
 
     private static String oldFields() {
-        return intField("id", false) + "," + stringField("name", 32);
+        return intField("id", false) + "," + stringField("name");
     }
 
     private static String newFields() {
-        return longField("id", false)
-                + ","
-                + stringField("name", 128)
-                + ","
-                + stringField("email", 64);
+        return longField("id", false) + "," + stringField("name") + "," + stringField("email");
     }
 
     private static String intField(String name, boolean optional) {
@@ -431,13 +427,8 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
         return "{\"type\":\"int64\",\"optional\":" + optional + ",\"field\":\"" + name + "\"}";
     }
 
-    private static String stringField(String name, int length) {
-        return "{\"type\":\"string\",\"optional\":true,\"parameters\":{"
-                + "\"__debezium.source.column.length\":\""
-                + length
-                + "\"},\"field\":\""
-                + name
-                + "\"}";
+    private static String stringField(String name) {
+        return "{\"type\":\"string\",\"optional\":true,\"field\":\"" + name + "\"}";
     }
 
     private static String withField(String schema, String field) {

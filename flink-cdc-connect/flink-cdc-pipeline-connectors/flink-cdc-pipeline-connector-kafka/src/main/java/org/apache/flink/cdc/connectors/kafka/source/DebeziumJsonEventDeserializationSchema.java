@@ -310,7 +310,7 @@ public class DebeziumJsonEventDeserializationSchema
                 break;
             case "io.debezium.data.Enum":
             case "io.debezium.data.Json":
-                type = parseStringType(schema);
+                type = DataTypes.STRING();
                 break;
             case "org.apache.kafka.connect.data.Decimal":
                 int scale = schema.path("parameters").path("scale").asInt(0);
@@ -346,17 +346,12 @@ public class DebeziumJsonEventDeserializationSchema
             case "bytes":
                 return DataTypes.BYTES();
             case "string":
-                return parseStringType(schema);
+                // Kafka Connect has no VARCHAR; MySQL CHAR/VARCHAR/TEXT all become string.
+                return DataTypes.STRING();
             default:
                 throw new IllegalArgumentException(
                         "Unsupported Debezium schema type '" + type + "'.");
         }
-    }
-
-    private DataType parseStringType(JsonNode schema) {
-        return positiveParameter(schema, "__debezium.source.column.length")
-                .map(DataTypes::VARCHAR)
-                .orElseGet(DataTypes::STRING);
     }
 
     private Optional<Integer> positiveParameter(JsonNode schema, String name) {
