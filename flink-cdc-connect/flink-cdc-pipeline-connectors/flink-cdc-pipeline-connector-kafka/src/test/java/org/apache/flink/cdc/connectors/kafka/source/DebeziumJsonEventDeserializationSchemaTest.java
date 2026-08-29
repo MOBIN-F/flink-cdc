@@ -175,6 +175,98 @@ class DebeziumJsonEventDeserializationSchemaTest {
     }
 
     @Test
+    void testIntToStringWideningOnSamePartition() throws Exception {
+        DebeziumJsonEventDeserializationSchema deserializer =
+                new DebeziumJsonEventDeserializationSchema();
+        TestCollector collector = new TestCollector();
+        String intFields = field("int32", "id", false) + "," + field("int32", "age", true);
+        String stringFields = field("int32", "id", false) + "," + field("string", "age", true);
+
+        deserializer.deserialize(
+                record(0, 1, KEY, value(intFields, "c", "null", "{\"id\":1,\"age\":18}")),
+                collector);
+        deserializer.deserialize(
+                record(0, 2, KEY, value(stringFields, "c", "null", "{\"id\":2,\"age\":\"hello\"}")),
+                collector);
+
+        Assertions.assertThat(collector.events)
+                .extracting(event -> event.getClass().getSimpleName())
+                .containsExactly(
+                        "CreateTableEvent",
+                        "DataChangeEvent",
+                        "AlterColumnTypeEvent",
+                        "DataChangeEvent");
+        CreateTableEvent createTable = (CreateTableEvent) collector.events.get(0);
+        Assertions.assertThat(
+                        createTable
+                                .getSchema()
+                                .getColumn("age")
+                                .orElseThrow(AssertionError::new)
+                                .getType()
+                                .getTypeRoot())
+                .isEqualTo(DataTypeRoot.INTEGER);
+        AlterColumnTypeEvent alter = (AlterColumnTypeEvent) collector.events.get(2);
+        Assertions.assertThat(alter.getTypeMapping().get("age"))
+                .isEqualTo(DataTypes.STRING().nullable());
+        DataChangeEvent intRecord = (DataChangeEvent) collector.events.get(1);
+        Assertions.assertThat(intRecord.after().getInt(1)).isEqualTo(18);
+        DataChangeEvent stringRecord = (DataChangeEvent) collector.events.get(3);
+        Assertions.assertThat(stringRecord.after().getString(1).toString()).isEqualTo("hello");
+    }
+
+    @Test
+    void testStringThenHistoricalIntFromAnotherPartition() throws Exception {
+        DebeziumJsonEventDeserializationSchema deserializer =
+                new DebeziumJsonEventDeserializationSchema();
+        TestCollector collector = new TestCollector();
+        String intFields = field("int32", "id", false) + "," + field("int32", "age", true);
+        String stringFields = field("int32", "id", false) + "," + field("string", "age", true);
+
+        deserializer.deserialize(
+                record(1, 1, KEY, value(stringFields, "c", "null", "{\"id\":1,\"age\":\"hello\"}")),
+                collector);
+        deserializer.deserialize(
+                record(0, 1, KEY, value(intFields, "c", "null", "{\"id\":2,\"age\":19}")),
+                collector);
+
+        Assertions.assertThat(collector.events)
+                .extracting(event -> event.getClass().getSimpleName())
+                .containsExactly("CreateTableEvent", "DataChangeEvent", "DataChangeEvent");
+        DataChangeEvent historical = (DataChangeEvent) collector.events.get(2);
+        Assertions.assertThat(historical.after().getString(1).toString()).isEqualTo("19");
+    }
+
+    @Test
+    void testStringToIntWithinPartitionFailsClearly() throws Exception {
+        DebeziumJsonEventDeserializationSchema deserializer =
+                new DebeziumJsonEventDeserializationSchema();
+        TestCollector collector = new TestCollector();
+        String stringFields = field("int32", "id", false) + "," + field("string", "age", true);
+        String intFields = field("int32", "id", false) + "," + field("int32", "age", true);
+        deserializer.deserialize(
+                record(0, 1, KEY, value(stringFields, "c", "null", "{\"id\":1,\"age\":\"hello\"}")),
+                collector);
+
+        Assertions.assertThatThrownBy(
+                        () ->
+                                deserializer.deserialize(
+                                        record(
+                                                0,
+                                                2,
+                                                KEY,
+                                                value(
+                                                        intFields,
+                                                        "c",
+                                                        "null",
+                                                        "{\"id\":2,\"age\":19}")),
+                                        collector))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Incompatible or narrowing type change")
+                .hasMessageContaining("age")
+                .hasMessageContaining("@2");
+    }
+
+    @Test
     void testSchemaContractionWithinPartitionFailsClearly() throws Exception {
         DebeziumJsonEventDeserializationSchema deserializer =
                 new DebeziumJsonEventDeserializationSchema();
@@ -362,8 +454,7 @@ class DebeziumJsonEventDeserializationSchemaTest {
                 new DebeziumJsonEventDeserializationSchema();
         TestCollector collector = new TestCollector();
 
-        String fields =
-                field("int32", "id", false) + "," + stringFieldWithLength("name", 32);
+        String fields = field("int32", "id", false) + "," + stringFieldWithLength("name", 32);
         deserializer.deserialize(
                 record(0, 1, KEY, value(fields, "c", "null", "{\"id\":1,\"name\":\"Alice\"}")),
                 collector);

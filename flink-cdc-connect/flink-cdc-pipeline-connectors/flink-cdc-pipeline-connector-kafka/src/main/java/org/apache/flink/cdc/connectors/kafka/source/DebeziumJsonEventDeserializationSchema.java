@@ -498,6 +498,11 @@ public class DebeziumJsonEventDeserializationSchema
         if (currentNullable.equals(incomingNullable)) {
             return currentNullable;
         }
+        // STRING is the universal widening target used by SchemaMergingUtils. Replay of an
+        // INT → STRING change (MySQL ALTER to VARCHAR) must follow the same rule.
+        if (incoming.is(DataTypeRoot.VARCHAR)) {
+            return DataTypes.STRING().copy(nullable);
+        }
         int currentRank = integerRank(current.getTypeRoot());
         int incomingRank = integerRank(incoming.getTypeRoot());
         if (currentRank > 0 && incomingRank > currentRank) {

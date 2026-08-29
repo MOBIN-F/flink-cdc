@@ -156,7 +156,7 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
                 0,
                 value(
                         modifyColumnFields(),
-                        "{\"id\":3,\"name\":\"charlie\",\"age\":2147483648,\"email\":\"charlie@example.com\"}"));
+                        "{\"id\":3,\"name\":\"charlie\",\"age\":40,\"email\":\"charlie@example.com\"}"));
         waitUntilStarRocksSchemaChangeIdle();
         validateSinkSchema(
                 Arrays.asList(
@@ -169,7 +169,7 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
                 Arrays.asList(
                         "1 | alice | 18 | null",
                         "2 | bob | 21 | bob@example.com",
-                        "3 | charlie | 2147483648 | charlie@example.com"));
+                        "3 | charlie | 40 | charlie@example.com"));
     }
 
     @Test
@@ -195,6 +195,38 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
         send(0, value(oldFields(), "{\"id\":2,\"name\":\"old\"}"));
         validateSinkResult(
                 3, Arrays.asList("2 | old | null", "2147483648 | new | new@example.com"));
+    }
+
+    @Test
+    void testReplayIntToStringAlterFromHistoricalOffset() throws Exception {
+        Path kafkaJar = TestUtils.getResource("kafka-cdc-pipeline-connector.jar");
+        Path starRocksJar = TestUtils.getResource("starrocks-cdc-pipeline-connector.jar");
+        submitPipelineJob(buildPipelineJob(), kafkaJar, starRocksJar);
+        waitUntilJobRunning(Duration.ofSeconds(30));
+        LOG.info("Pipeline job is running");
+
+        LOG.info("Historical INT records...");
+        send(0, value(intAgeFields(), "{\"id\":1,\"name\":\"alice\",\"age\":18}"));
+        validateSinkSchema(
+                Arrays.asList(
+                        "id | int | NO | true | null",
+                        "name | varchar(1048576) | YES | false | null",
+                        "age | int | YES | false | null"));
+        validateSinkResult(3, Collections.singletonList("1 | alice | 18"));
+
+        LOG.info("ALTER INT to STRING on the same partition...");
+        send(0, value(stringAgeFields(), "{\"id\":2,\"name\":\"bob\",\"age\":\"hello\"}"));
+        waitUntilStarRocksSchemaChangeIdle();
+        validateSinkSchema(
+                Arrays.asList(
+                        "id | int | NO | true | null",
+                        "name | varchar(1048576) | YES | false | null",
+                        "age | varchar(1048576) | YES | false | null"));
+        validateSinkResult(3, Arrays.asList("1 | alice | 18", "2 | bob | hello"));
+
+        LOG.info("Replay remaining historical INT records from another partition...");
+        send(1, value(intAgeFields(), "{\"id\":3,\"name\":\"carol\",\"age\":19}"));
+        validateSinkResult(3, Arrays.asList("1 | alice | 18", "2 | bob | hello", "3 | carol | 19"));
     }
 
     private String buildPipelineJob() {
@@ -395,6 +427,14 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
 
     private static String createFields() {
         return intField("id", false) + "," + stringField("name") + "," + intField("age", true);
+    }
+
+    private static String intAgeFields() {
+        return createFields();
+    }
+
+    private static String stringAgeFields() {
+        return intField("id", false) + "," + stringField("name") + "," + stringField("age");
     }
 
     private static String addColumnFields() {

@@ -86,7 +86,7 @@ The source supports:
 
 * creating a table from the first record seen for a table;
 * adding nullable columns;
-* compatible type widening, such as `INT` to `BIGINT` or increasing decimal precision. Kafka Connect `string` is always mapped to `STRING` (MySQL `CHAR`/`VARCHAR`/`TEXT` all become `string` in Debezium JSON).
+* compatible type widening, such as `INT` to `BIGINT`, `INT` to `STRING`, or increasing decimal precision. Kafka Connect `string` is always mapped to `STRING` (MySQL `CHAR`/`VARCHAR`/`TEXT` all become `string` in Debezium JSON). Replaying from an old offset that spans an `INT` → `STRING` change converts historical integer values to strings instead of failing.
 
 Narrowing types, incompatible type changes, primary-key changes, dropping columns, and renaming columns fail explicitly. Use `schema.change.behavior: lenient` for a parallel Kafka source.
 

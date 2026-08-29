@@ -470,6 +470,9 @@ public class StarRocksMetadataApplier implements MetadataApplier {
         if ("VARCHAR".equals(widerType) && "CHAR".equals(narrowerType)) {
             return wider.getColumnSize().orElse(0) >= narrower.getColumnSize().orElse(0);
         }
+        if ("VARCHAR".equals(widerType) || "STRING".equals(widerType)) {
+            return numericTypeRank(narrowerType) >= 0 || "BOOLEAN".equals(narrowerType);
+        }
         int widerRank = numericTypeRank(widerType);
         int narrowerRank = numericTypeRank(narrowerType);
         return widerRank >= 0 && narrowerRank >= 0 && widerRank >= narrowerRank;

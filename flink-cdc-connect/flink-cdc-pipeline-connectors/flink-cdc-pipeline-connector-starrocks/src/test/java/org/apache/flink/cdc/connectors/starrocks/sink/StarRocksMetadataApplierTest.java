@@ -224,6 +224,42 @@ class StarRocksMetadataApplierTest {
     }
 
     @Test
+    void testRejectCreateTableWhenExistingTableMissesInferredColumn() {
+        TableId tableId = TableId.parse("test.narrow_existing_tbl");
+        Schema existingSchema =
+                Schema.newBuilder()
+                        .physicalColumn("id", new IntType(false))
+                        .physicalColumn("name", new IntType())
+                        .primaryKey("id")
+                        .build();
+        metadataApplier.applySchemaChange(new CreateTableEvent(tableId, existingSchema));
+
+        Schema firstMessageSchema =
+                Schema.newBuilder()
+                        .physicalColumn("id", new IntType(false))
+                        .physicalColumn("name", new IntType())
+                        .physicalColumn("email", new IntType())
+                        .primaryKey("id")
+                        .build();
+
+        Assertions.assertThatThrownBy(
+                        () ->
+                                metadataApplier.applySchemaChange(
+                                        new CreateTableEvent(tableId, firstMessageSchema)))
+                .isInstanceOfSatisfying(
+                        SchemaEvolveException.class,
+                        exception ->
+                                Assertions.assertThat(exception.getExceptionMessage())
+                                        .contains("missing or incompatible")
+                                        .contains("email"));
+
+        StarRocksTable actualTable =
+                catalog.getTable(tableId.getSchemaName(), tableId.getTableName()).orElse(null);
+        Assertions.assertThat(actualTable).isNotNull();
+        Assertions.assertThat(actualTable.getColumn("email")).isNull();
+    }
+
+    @Test
     void testRejectReplayWhenPrimaryKeysDiffer() {
         TableId tableId = TableId.parse("test.incompatible_replay_tbl");
         Schema currentSchema =
