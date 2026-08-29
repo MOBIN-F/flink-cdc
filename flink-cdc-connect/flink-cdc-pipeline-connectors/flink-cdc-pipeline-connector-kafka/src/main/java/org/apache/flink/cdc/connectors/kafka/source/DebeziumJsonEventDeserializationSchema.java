@@ -116,14 +116,12 @@ public class DebeziumJsonEventDeserializationSchema
             throw failure(record, "Debezium value does not contain a before/after row schema.");
         }
 
-        List<String> primaryKeys = parsePrimaryKeysFromKey(record);
-        validatePrimaryKeyColumns(record, tableId, rowSchemaNode, primaryKeys);
-        Schema incomingSchema = parseSchema(rowSchemaNode, primaryKeys);
+        Schema incomingSchema = parseSchema(rowSchemaNode);
         PartitionTableKey partitionTableKey =
                 new PartitionTableKey(record.topic(), record.partition(), tableId);
         Schema partitionSchema = partitionTableSchemas.get(partitionTableKey);
         if (partitionSchema != null) {
-            validatePartitionEvolution(record, tableId, partitionSchema, incomingSchema);
+            validatePartitionEvolution(record, partitionSchema, incomingSchema);
         }
 
         TableSchemaState state = globalTableSchemas.get(tableId);
@@ -181,62 +179,11 @@ public class DebeziumJsonEventDeserializationSchema
         }
     }
 
-    private List<String> parsePrimaryKeysFromKey(ConsumerRecord<byte[], byte[]> record)
-            throws IOException {
-        if (record.key() == null) {
-            return new ArrayList<>();
-        }
-        JsonNode keyRoot = mapper.readTree(record.key());
-        JsonNode fields = keyRoot.path("schema").path("fields");
-        if (!fields.isArray() || fields.isEmpty()) {
-            return new ArrayList<>();
-        }
-        List<String> keys = new ArrayList<>();
-        for (JsonNode field : fields) {
-            String key = requiredText(field, "field", "Debezium key schema field");
-            if (keys.contains(key)) {
-                throw failure(
-                        record,
-                        "Debezium key schema contains duplicate primary key column '" + key + "'.");
-            }
-            keys.add(key);
-        }
-        return keys;
-    }
-
-    private void validatePrimaryKeyColumns(
-            ConsumerRecord<byte[], byte[]> record,
-            TableId tableId,
-            JsonNode rowSchema,
-            List<String> primaryKeys) {
-        if (primaryKeys.isEmpty()) {
-            return;
-        }
-        List<String> rowColumns = new ArrayList<>();
-        for (JsonNode field : rowSchema.path("fields")) {
-            rowColumns.add(requiredText(field, "field", "Debezium row schema field"));
-        }
-        for (String primaryKey : primaryKeys) {
-            if (!rowColumns.contains(primaryKey)) {
-                throw failure(
-                        record,
-                        "Inferred primary key column '"
-                                + primaryKey
-                                + "' does not exist in row schema for "
-                                + tableId
-                                + ".");
-            }
-        }
-    }
-
-    private Schema parseSchema(JsonNode rowSchema, List<String> primaryKeys) {
+    private Schema parseSchema(JsonNode rowSchema) {
         Schema.Builder builder = Schema.newBuilder();
         for (JsonNode field : rowSchema.path("fields")) {
             builder.physicalColumn(
                     requiredText(field, "field", "Debezium row schema field"), parseType(field));
-        }
-        if (!primaryKeys.isEmpty()) {
-            builder.primaryKey(primaryKeys);
         }
         return builder.build();
     }
@@ -337,22 +284,14 @@ public class DebeziumJsonEventDeserializationSchema
     }
 
     private void validatePartitionEvolution(
-            ConsumerRecord<byte[], byte[]> record,
-            TableId tableId,
-            Schema previous,
-            Schema incoming) {
-        validatePrimaryKeys(record, tableId, previous, incoming);
+            ConsumerRecord<byte[], byte[]> record, Schema previous, Schema incoming) {
         Map<String, Column> incomingColumns = columnsByName(incoming);
         for (Column previousColumn : previous.getColumns()) {
             Column incomingColumn = incomingColumns.get(previousColumn.getName());
             if (incomingColumn == null) {
-                throw failure(
-                        record,
-                        "Incompatible schema contraction removed column '"
-                                + previousColumn.getName()
-                                + "' from "
-                                + tableId
-                                + " within Kafka partition.");
+                // Dropped or renamed source columns stay in the widest schema. New names are
+                // added later; missing values are coerced to null.
+                continue;
             }
             DataType merged = mergeType(previousColumn.getType(), incomingColumn.getType());
             if (merged == null || !merged.equals(incomingColumn.getType())) {
@@ -375,8 +314,6 @@ public class DebeziumJsonEventDeserializationSchema
             TableSchemaState state,
             Schema incoming,
             List<Event> events) {
-        validatePrimaryKeys(record, tableId, state.schema, incoming);
-
         List<Column> widestColumns = new ArrayList<>(state.schema.getColumns());
         List<AddColumnEvent.ColumnWithPosition> additions = new ArrayList<>();
         Map<String, DataType> alteredTypes = new LinkedHashMap<>();
@@ -439,24 +376,6 @@ public class DebeziumJsonEventDeserializationSchema
         }
         if (!additions.isEmpty() || !alteredTypes.isEmpty()) {
             state.schema = state.schema.copy(widestColumns);
-        }
-    }
-
-    private void validatePrimaryKeys(
-            ConsumerRecord<byte[], byte[]> record,
-            TableId tableId,
-            Schema previous,
-            Schema incoming) {
-        if (!previous.primaryKeys().equals(incoming.primaryKeys())) {
-            throw failure(
-                    record,
-                    "Primary key changed from "
-                            + previous.primaryKeys()
-                            + " to "
-                            + incoming.primaryKeys()
-                            + " for "
-                            + tableId
-                            + ".");
         }
     }
 

@@ -74,17 +74,17 @@ Kafka Source 配置项：
 * `scan.startup.mode`：`group-offsets`（默认）、`earliest-offset` 或 `latest-offset`。
 * `properties.bootstrap.servers`（必填）及 `properties.*`：Kafka Consumer 参数。
 
-Kafka Source 不提供主键配置项。如果 Kafka key 是带 schema 的 Debezium JSON，Source 会从中推断主键；否则需要在 Pipeline 的 `transform` 中通过 `primary-keys` 指定或覆盖。写入 StarRocks 前表必须具备主键。
+Kafka Source 不推断主键。请在 Pipeline 的 `transform` 中通过 `primary-keys` 指定。写入 StarRocks 前表必须具备主键。
 
 Kafka value 必须使用同时包含 `schema` 与 `payload` 的 Debezium JSON。不包含 schema 的 value 无法可靠识别字段类型变化，因此会被拒绝。
 
-主键用于下游分区和 upsert 语义，但无法恢复 Kafka 中已经丢失的顺序；生产端仍需保证相同逻辑主键的变更进入同一个 Kafka 分区。
+Transform 中的主键用于下游分区和 upsert 语义，但无法恢复 Kafka 中已经丢失的顺序；生产端仍需保证相同逻辑主键的变更进入同一个 Kafka 分区。
 
 ### Schema Evolution 与多分区
 
 Kafka 只保证分区内有序。Source 会先在每个 Source subtask 内对其负责分区的 schema 做单调扩宽，再由 distributed schema coordinator 跨 subtask 合并。新 schema 出现后到达的旧格式消息会被转换到当前最宽 schema，不会触发类型回退。
 
-Source 支持首次发现表时建表、增加 nullable 字段，以及 `INT → BIGINT`、`INT → STRING`、Decimal 精度扩大等兼容扩宽。Kafka Connect 的 `string` 一律映射为 `STRING`（MySQL 的 `CHAR`/`VARCHAR`/`TEXT` 在 Debezium JSON 中都是 `string`）。从旧 offset 重放并跨过 `INT → STRING` 时，历史整型值会被转成字符串，而不会失败。类型缩窄、不兼容类型变化、主键变化、删列和改名会明确失败。并行 Kafka Source 应配置 `schema.change.behavior: lenient`。
+Source 支持首次发现表时建表、增加 nullable 字段，以及把 schema 做成单调超集：源端删列或改名时会保留旧列（NOT NULL 会改为 nullable）并加入新列名，不会发出 Drop/Rename。历史行的新列为 null，之后行的旧列为 null。另外支持 `INT → BIGINT`、`INT → STRING`、Decimal 精度扩大等兼容扩宽。Kafka Connect 的 `string` 一律映射为 `STRING`（MySQL 的 `CHAR`/`VARCHAR`/`TEXT` 在 Debezium JSON 中都是 `string`）。从旧 offset 重放并跨过 `INT → STRING` 时，历史整型值会被转成字符串，而不会失败。类型缩窄、不兼容类型变化会明确失败。并行 Kafka Source 应配置 `schema.change.behavior: lenient`。
 
 从旧 offset 重刷时，空目标表会按历史顺序执行 `CREATE → ADD/ALTER`。已有 StarRocks 表必须是历史 schema 的兼容超集；重复的 Create/Add/Alter 会按幂等方式处理，目标表额外字段必须 nullable 或有默认值。StarRocks 主键表可以通过 upsert 覆盖旧记录；duplicate-key 表全量重刷前应清表或改写新表。
 

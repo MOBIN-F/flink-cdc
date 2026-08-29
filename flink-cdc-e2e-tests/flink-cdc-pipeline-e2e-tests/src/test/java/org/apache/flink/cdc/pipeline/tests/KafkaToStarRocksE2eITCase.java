@@ -229,6 +229,37 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
         validateSinkResult(3, Arrays.asList("1 | alice | 18", "2 | bob | hello", "3 | carol | 19"));
     }
 
+    @Test
+    void testSamePartitionRenameKeepsOldColumnAndAddsNew() throws Exception {
+        Path kafkaJar = TestUtils.getResource("kafka-cdc-pipeline-connector.jar");
+        Path starRocksJar = TestUtils.getResource("starrocks-cdc-pipeline-connector.jar");
+        submitPipelineJob(buildPipelineJob(), kafkaJar, starRocksJar);
+        waitUntilJobRunning(Duration.ofSeconds(30));
+        LOG.info("Pipeline job is running");
+
+        send(0, value(oldFields(), "{\"id\":1,\"name\":\"alice\"}"));
+        validateSinkSchema(
+                Arrays.asList(
+                        "id | int | NO | true | null",
+                        "name | varchar(1048576) | YES | false | null"));
+        validateSinkResult(2, Collections.singletonList("1 | alice"));
+
+        LOG.info("Source column name is replaced by full_name on the same partition...");
+        send(0, value(renamedFields(), "{\"id\":2,\"full_name\":\"bob\"}"));
+        waitUntilStarRocksSchemaChangeIdle();
+        validateSinkSchema(
+                Arrays.asList(
+                        "id | int | NO | true | null",
+                        "name | varchar(1048576) | YES | false | null",
+                        "full_name | varchar(1048576) | YES | false | null"));
+        validateSinkResult(3, Arrays.asList("1 | alice | null", "2 | null | bob"));
+
+        LOG.info("Historical records that still use name arrive from another partition...");
+        send(1, value(oldFields(), "{\"id\":3,\"name\":\"carol\"}"));
+        validateSinkResult(
+                3, Arrays.asList("1 | alice | null", "2 | null | bob", "3 | carol | null"));
+    }
+
     private String buildPipelineJob() {
         return String.format(
                 "source:\n"
@@ -456,6 +487,10 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
 
     private static String oldFields() {
         return intField("id", false) + "," + stringField("name");
+    }
+
+    private static String renamedFields() {
+        return intField("id", false) + "," + stringField("full_name");
     }
 
     private static String newFields() {

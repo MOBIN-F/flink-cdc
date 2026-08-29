@@ -73,11 +73,11 @@ Kafka source options:
 * `scan.startup.mode`: `group-offsets` (default), `earliest-offset`, or `latest-offset`.
 * `properties.bootstrap.servers` (required) and `properties.*`: Kafka consumer properties.
 
-Primary keys are not configured on the Kafka source. They are inferred from a schema-enabled Debezium record key when present. To assign or override primary keys, use a pipeline `transform` with `primary-keys`. A StarRocks sink still requires a primary key before it can create a table.
+Primary keys are not inferred from Debezium JSON. Assign them with a pipeline `transform` `primary-keys` option. A StarRocks sink still requires a primary key before it can create a table.
 
 The Kafka value must use Debezium JSON with the `schema` and `payload` fields. Values without an embedded schema cannot reliably describe column type changes and are rejected.
 
-The primary key determines downstream partitioning and upsert semantics, but it cannot restore ordering already lost in Kafka. Producers must still send changes for the same logical primary key to the same Kafka partition.
+The transform primary key determines downstream partitioning and upsert semantics, but it cannot restore ordering already lost in Kafka. Producers must still send changes for the same logical primary key to the same Kafka partition.
 
 ### Schema evolution and multiple partitions
 
@@ -87,9 +87,10 @@ The source supports:
 
 * creating a table from the first record seen for a table;
 * adding nullable columns;
+* keeping a monotonic column superset: dropped or renamed source columns are retained (NOT NULL columns become nullable) and new names are added. Historical rows have nulls in new columns; later rows have nulls in old columns. The source does not emit drop or rename events;
 * compatible type widening, such as `INT` to `BIGINT`, `INT` to `STRING`, or increasing decimal precision. Kafka Connect `string` is always mapped to `STRING` (MySQL `CHAR`/`VARCHAR`/`TEXT` all become `string` in Debezium JSON). Replaying from an old offset that spans an `INT` → `STRING` change converts historical integer values to strings instead of failing.
 
-Narrowing types, incompatible type changes, primary-key changes, dropping columns, and renaming columns fail explicitly. Use `schema.change.behavior: lenient` for a parallel Kafka source.
+Narrowing types and incompatible type changes fail explicitly. Use `schema.change.behavior: lenient` for a parallel Kafka source.
 
 When replaying from an old offset, an empty target table follows the historical `CREATE → ADD/ALTER` sequence. An existing StarRocks table must be a compatible superset. Replayed create/add/alter operations are idempotent; extra target columns must be nullable or have defaults. Replaying rows is safe for primary-key tables through upserts. Duplicate-key tables should be cleared or replaced before a full replay.
 

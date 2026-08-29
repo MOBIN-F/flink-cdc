@@ -18,6 +18,7 @@
 package org.apache.flink.cdc.connectors.kafka.source;
 
 import org.apache.flink.cdc.common.data.RecordData;
+import org.apache.flink.cdc.common.event.AddColumnEvent;
 import org.apache.flink.cdc.common.event.AlterColumnTypeEvent;
 import org.apache.flink.cdc.common.event.CreateTableEvent;
 import org.apache.flink.cdc.common.event.DataChangeEvent;
@@ -72,7 +73,7 @@ class DebeziumJsonEventDeserializationSchemaTest {
                 .isInstanceOf(CreateTableEvent.class);
         Assertions.assertThat(
                         ((CreateTableEvent) collector.events.get(0)).getSchema().primaryKeys())
-                .containsExactly("id");
+                .isEmpty();
         Assertions.assertThat(
                         collector.events.subList(1, 4).stream()
                                 .map(event -> ((DataChangeEvent) event).op()))
@@ -264,73 +265,151 @@ class DebeziumJsonEventDeserializationSchemaTest {
     }
 
     @Test
-    void testSchemaContractionWithinPartitionFailsClearly() throws Exception {
+    void testDroppedColumnStaysInSchemaAndReadsAsNull() throws Exception {
         DebeziumJsonEventDeserializationSchema deserializer =
                 new DebeziumJsonEventDeserializationSchema();
         TestCollector collector = new TestCollector();
         String fields = field("int32", "id", false) + "," + field("string", "name", true);
         deserializer.deserialize(
                 record(0, 1, KEY, value(fields, "c", "null", row(1, "Alice"))), collector);
+        deserializer.deserialize(
+                record(0, 2, KEY, value(field("int32", "id", false), "c", "null", "{\"id\":2}")),
+                collector);
 
-        Assertions.assertThatThrownBy(
-                        () ->
-                                deserializer.deserialize(
-                                        record(
-                                                0,
-                                                2,
-                                                KEY,
-                                                value(
-                                                        field("int32", "id", false),
-                                                        "c",
-                                                        "null",
-                                                        "{\"id\":2}")),
-                                        collector))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("removed column 'name'")
-                .hasMessageContaining("@2");
+        Assertions.assertThat(collector.events)
+                .extracting(event -> event.getClass().getSimpleName())
+                .containsExactly("CreateTableEvent", "DataChangeEvent", "DataChangeEvent");
+        CreateTableEvent createTable = (CreateTableEvent) collector.events.get(0);
+        Assertions.assertThat(createTable.getSchema().getColumnNames())
+                .containsExactly("id", "name");
+        DataChangeEvent dropped = (DataChangeEvent) collector.events.get(2);
+        Assertions.assertThat(dropped.after().getArity()).isEqualTo(2);
+        Assertions.assertThat(dropped.after().getInt(0)).isEqualTo(2);
+        Assertions.assertThat(dropped.after().isNullAt(1)).isTrue();
     }
 
     @Test
-    void testMissingKafkaKeyProducesSchemaWithoutPrimaryKeys() throws Exception {
+    void testRenamedColumnKeepsOldNameAndAddsNewColumn() throws Exception {
+        DebeziumJsonEventDeserializationSchema deserializer =
+                new DebeziumJsonEventDeserializationSchema();
+        TestCollector collector = new TestCollector();
+        String oldFields = field("int32", "id", false) + "," + field("string", "name", true);
+        String renamedFields =
+                field("int32", "id", false) + "," + field("string", "full_name", true);
+
+        deserializer.deserialize(
+                record(0, 1, KEY, value(oldFields, "c", "null", row(1, "Alice"))), collector);
+        deserializer.deserialize(
+                record(
+                        0,
+                        2,
+                        KEY,
+                        value(renamedFields, "c", "null", "{\"id\":2,\"full_name\":\"Bob\"}")),
+                collector);
+
+        Assertions.assertThat(collector.events)
+                .extracting(event -> event.getClass().getSimpleName())
+                .containsExactly(
+                        "CreateTableEvent", "DataChangeEvent", "AddColumnEvent", "DataChangeEvent");
+        AddColumnEvent addColumn = (AddColumnEvent) collector.events.get(2);
+        Assertions.assertThat(addColumn.getAddedColumns())
+                .extracting(column -> column.getAddColumn().getName())
+                .containsExactly("full_name");
+        DataChangeEvent beforeRename = (DataChangeEvent) collector.events.get(1);
+        Assertions.assertThat(beforeRename.after().getArity()).isEqualTo(2);
+        Assertions.assertThat(beforeRename.after().getString(1).toString()).isEqualTo("Alice");
+        DataChangeEvent afterRename = (DataChangeEvent) collector.events.get(3);
+        Assertions.assertThat(afterRename.after().getArity()).isEqualTo(3);
+        Assertions.assertThat(afterRename.after().isNullAt(1)).isTrue();
+        Assertions.assertThat(afterRename.after().getString(2).toString()).isEqualTo("Bob");
+    }
+
+    @Test
+    void testNonNullableDroppedColumnBecomesNullable() throws Exception {
+        DebeziumJsonEventDeserializationSchema deserializer =
+                new DebeziumJsonEventDeserializationSchema();
+        TestCollector collector = new TestCollector();
+        String fields = field("int32", "id", false) + "," + field("string", "name", false);
+        deserializer.deserialize(
+                record(0, 1, KEY, value(fields, "c", "null", row(1, "Alice"))), collector);
+        deserializer.deserialize(
+                record(0, 2, KEY, value(field("int32", "id", false), "c", "null", "{\"id\":2}")),
+                collector);
+
+        Assertions.assertThat(collector.events)
+                .extracting(event -> event.getClass().getSimpleName())
+                .containsExactly(
+                        "CreateTableEvent",
+                        "DataChangeEvent",
+                        "AlterColumnTypeEvent",
+                        "DataChangeEvent");
+        AlterColumnTypeEvent alter = (AlterColumnTypeEvent) collector.events.get(2);
+        Assertions.assertThat(alter.getTypeMapping().get("name"))
+                .isEqualTo(DataTypes.STRING().nullable());
+        DataChangeEvent dropped = (DataChangeEvent) collector.events.get(3);
+        Assertions.assertThat(dropped.after().isNullAt(1)).isTrue();
+    }
+
+    @Test
+    void testHistoricalNameAfterRenameFromAnotherPartition() throws Exception {
+        DebeziumJsonEventDeserializationSchema deserializer =
+                new DebeziumJsonEventDeserializationSchema();
+        TestCollector collector = new TestCollector();
+        String oldFields = field("int32", "id", false) + "," + field("string", "name", true);
+        String renamedFields =
+                field("int32", "id", false) + "," + field("string", "full_name", true);
+
+        deserializer.deserialize(
+                record(0, 1, KEY, value(oldFields, "c", "null", row(1, "Alice"))), collector);
+        deserializer.deserialize(
+                record(
+                        0,
+                        2,
+                        KEY,
+                        value(renamedFields, "c", "null", "{\"id\":2,\"full_name\":\"Bob\"}")),
+                collector);
+        deserializer.deserialize(
+                record(1, 1, KEY, value(oldFields, "c", "null", row(3, "Carol"))), collector);
+
+        Assertions.assertThat(collector.events)
+                .extracting(event -> event.getClass().getSimpleName())
+                .containsExactly(
+                        "CreateTableEvent",
+                        "DataChangeEvent",
+                        "AddColumnEvent",
+                        "DataChangeEvent",
+                        "DataChangeEvent");
+        DataChangeEvent historical = (DataChangeEvent) collector.events.get(4);
+        Assertions.assertThat(historical.after().getArity()).isEqualTo(3);
+        Assertions.assertThat(historical.after().getString(1).toString()).isEqualTo("Carol");
+        Assertions.assertThat(historical.after().isNullAt(2)).isTrue();
+    }
+
+    @Test
+    void testSourceSchemaDoesNotUseKafkaKeyAsPrimaryKey() throws Exception {
         DebeziumJsonEventDeserializationSchema deserializer =
                 new DebeziumJsonEventDeserializationSchema();
         TestCollector collector = new TestCollector();
         String fields = field("int32", "id", false) + "," + field("string", "name", true);
+        byte[] routedKey =
+                bytes(
+                        "{\"schema\":{\"type\":\"struct\",\"fields\":["
+                                + field("string", "__dbz__physicalTableIdentifier", false)
+                                + ","
+                                + field("int32", "id", false)
+                                + "]},\"payload\":{\"__dbz__physicalTableIdentifier\":\"poc_db.kafka_poc_test\",\"id\":1}}");
 
         deserializer.deserialize(
-                record(0, 1, null, value(fields, "c", "null", row(1, "Alice"))), collector);
+                record(0, 1, routedKey, value(fields, "c", "null", row(1, "Alice"))), collector);
+        deserializer.deserialize(
+                record(0, 2, null, value(fields, "c", "null", row(2, "Bob"))), collector);
 
         Assertions.assertThat(
                         ((CreateTableEvent) collector.events.get(0)).getSchema().primaryKeys())
                 .isEmpty();
-    }
-
-    @Test
-    void testInferredPrimaryKeyMustExistInRowSchema() {
-        byte[] missingKey =
-                bytes(
-                        "{\"schema\":{\"type\":\"struct\",\"fields\":["
-                                + field("int32", "missing_id", false)
-                                + "]},\"payload\":{\"missing_id\":1}}");
-
-        Assertions.assertThatThrownBy(
-                        () ->
-                                new DebeziumJsonEventDeserializationSchema()
-                                        .deserialize(
-                                                record(
-                                                        0,
-                                                        1,
-                                                        missingKey,
-                                                        value(
-                                                                field("int32", "id", false),
-                                                                "c",
-                                                                "null",
-                                                                "{\"id\":1}")),
-                                                new TestCollector()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining(
-                        "primary key column 'missing_id' does not exist in row schema")
-                .hasMessageContaining("@1");
+        Assertions.assertThat(collector.events)
+                .extracting(event -> event.getClass().getSimpleName())
+                .containsExactly("CreateTableEvent", "DataChangeEvent", "DataChangeEvent");
     }
 
     @Test
