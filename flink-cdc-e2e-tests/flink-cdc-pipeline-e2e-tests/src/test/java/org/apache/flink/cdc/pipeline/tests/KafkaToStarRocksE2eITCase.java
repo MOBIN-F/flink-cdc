@@ -147,7 +147,7 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
                         "name | varchar(96) | YES | false | null",
                         "age | int | YES | false | null",
                         "email | varchar(192) | YES | false | null"));
-        waitForStarRocksAlterDone();
+        waitUntilStarRocksSchemaChangeIdle();
         validateSinkResult(
                 4, Arrays.asList("1 | alice | 18 | null", "2 | bob | 21 | bob@example.com"));
 
@@ -157,6 +157,7 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
                 value(
                         modifyColumnFields(),
                         "{\"id\":3,\"name\":\"charlie\",\"age\":22,\"email\":\"charlie@example.com\"}"));
+        waitUntilStarRocksSchemaChangeIdle();
         validateSinkSchema(
                 Arrays.asList(
                         "id | int | NO | true | null",
@@ -212,6 +213,7 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
                         + "  load-url: %s:8080\n"
                         + "  username: root\n"
                         + "  password: \"\"\n"
+                        + "  table.create.properties.replication_num: 1\n"
                         + "\n"
                         + "pipeline:\n"
                         + "  parallelism: 2\n"
@@ -251,10 +253,11 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
                     return;
                 }
                 LOG.info(
-                        "Executing {} didn't get expected results.\nExpected: {}\n  Actual: {}",
+                        "Executing {} didn't get expected results.\nExpected: {}\n  Actual: {}\n  Alter: {}",
                         sql,
                         expected,
-                        actual);
+                        actual,
+                        latestAlterState());
             } catch (SQLException t) {
                 LOG.info(
                         "Table {} isn't ready yet. Waiting for the next loop...", qualifiedTable());
@@ -284,38 +287,51 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
         return results;
     }
 
-    private void waitForStarRocksAlterDone() throws Exception {
+    private void waitUntilStarRocksSchemaChangeIdle() throws Exception {
         long deadline = System.currentTimeMillis() + EVENT_WAITING_TIMEOUT.toMillis();
+        long idleSince = -1L;
         String lastState = "ABSENT";
         while (System.currentTimeMillis() < deadline) {
-            try (Connection connection = STARROCKS_CONTAINER.createConnection("");
-                    Statement statement = connection.createStatement()) {
-                statement.execute("USE `" + DATABASE + "`");
-                try (ResultSet resultSet =
-                        statement.executeQuery(
-                                "SHOW ALTER TABLE COLUMN WHERE TableName = '"
-                                        + table
-                                        + "' ORDER BY CreateTime DESC LIMIT 1")) {
-                    if (!resultSet.next()) {
-                        return;
-                    }
-                    lastState = resultSet.getString("State");
-                    if ("FINISHED".equalsIgnoreCase(lastState)) {
-                        return;
-                    }
-                    if ("CANCELLED".equalsIgnoreCase(lastState)) {
-                        Assertions.fail(
-                                "StarRocks schema change was cancelled: "
-                                        + resultSet.getString("Msg"));
-                    }
-                }
-            } catch (SQLException e) {
-                LOG.info("StarRocks alter job is not ready yet.", e);
+            lastState = latestAlterState();
+            if (lastState.startsWith("CANCELLED")) {
+                Assertions.fail("StarRocks schema change was cancelled: " + lastState);
+            }
+            boolean running =
+                    lastState.startsWith("PENDING")
+                            || lastState.startsWith("WAITING_TXN")
+                            || lastState.startsWith("RUNNING");
+            if (running) {
+                idleSince = -1L;
+            } else if (idleSince < 0) {
+                idleSince = System.currentTimeMillis();
+            } else if (System.currentTimeMillis() - idleSince >= 3000L) {
+                return;
             }
             Thread.sleep(1000L);
         }
         Assertions.fail(
-                "Timed out waiting for StarRocks ALTER TABLE to finish, last state: " + lastState);
+                "Timed out waiting for StarRocks schema change to become idle, last state: "
+                        + lastState);
+    }
+
+    private String latestAlterState() {
+        try (Connection connection = STARROCKS_CONTAINER.createConnection("");
+                Statement statement = connection.createStatement()) {
+            statement.execute("USE `" + DATABASE + "`");
+            try (ResultSet resultSet =
+                    statement.executeQuery(
+                            "SHOW ALTER TABLE COLUMN WHERE TableName = '"
+                                    + table
+                                    + "' ORDER BY CreateTime DESC LIMIT 1")) {
+                if (!resultSet.next()) {
+                    return "ABSENT";
+                }
+                String msg = resultSet.getString("Msg");
+                return resultSet.getString("State") + (msg == null ? "" : "/" + msg);
+            }
+        } catch (Exception e) {
+            return e.getMessage();
+        }
     }
 
     private void dropTableQuietly() {
