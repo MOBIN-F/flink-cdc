@@ -236,8 +236,11 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
                         + "  topic: %s\n"
                         + "  group-id: %s\n"
                         + "  scan.startup.mode: earliest-offset\n"
-                        + "  primary-keys: id\n"
                         + "  properties.bootstrap.servers: %s:9092\n"
+                        + "\n"
+                        + "transform:\n"
+                        + "  - source-table: %s.\\.*\n"
+                        + "    primary-keys: id\n"
                         + "\n"
                         + "sink:\n"
                         + "  type: starrocks\n"
@@ -250,7 +253,7 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
                         + "pipeline:\n"
                         + "  parallelism: 2\n"
                         + "  schema.change.behavior: lenient\n",
-                topic, UUID.randomUUID(), KAFKA_ALIAS, STARROCKS_ALIAS, STARROCKS_ALIAS);
+                topic, UUID.randomUUID(), KAFKA_ALIAS, DATABASE, STARROCKS_ALIAS, STARROCKS_ALIAS);
     }
 
     private void send(int partition, byte[] value) throws Exception {

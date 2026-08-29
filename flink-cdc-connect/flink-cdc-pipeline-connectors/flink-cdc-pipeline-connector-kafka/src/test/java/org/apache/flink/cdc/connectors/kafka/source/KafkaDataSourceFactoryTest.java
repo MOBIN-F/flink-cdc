@@ -18,7 +18,6 @@
 package org.apache.flink.cdc.connectors.kafka.source;
 
 import org.apache.flink.cdc.common.configuration.Configuration;
-import org.apache.flink.cdc.common.event.TableId;
 import org.apache.flink.cdc.common.factories.DataSourceFactory;
 import org.apache.flink.cdc.common.factories.FactoryHelper;
 import org.apache.flink.cdc.common.source.DataSource;
@@ -105,49 +104,6 @@ class KafkaDataSourceFactoryTest {
                                                 Thread.currentThread().getContextClassLoader())))
                 .isInstanceOf(ValidationException.class)
                 .hasMessageContaining("properties.bootstrap.servers");
-    }
-
-    @Test
-    void testPrimaryKeyOptions() {
-        Map<String, String> options = validConnectionOptions();
-        options.put("topic", "orders");
-        options.put("primary-keys", "tenant_id, id");
-        options.put(
-                "primary-keys.mapping",
-                "inventory.customers:customer_id;inventory.orders:tenant_id,order_id");
-
-        KafkaDataSource source = (KafkaDataSource) createSource(options);
-
-        Assertions.assertThat(source.getPrimaryKeys()).containsExactly("tenant_id", "id");
-        Assertions.assertThat(
-                        source.getPrimaryKeysMapping().get(TableId.parse("inventory.customers")))
-                .containsExactly("customer_id");
-        Assertions.assertThat(source.getPrimaryKeysMapping().get(TableId.parse("inventory.orders")))
-                .containsExactly("tenant_id", "order_id");
-    }
-
-    @Test
-    void testRejectsMalformedPrimaryKeyOptions() {
-        Map<String, String> options = validConnectionOptions();
-        options.put("topic", "orders");
-        options.put("primary-keys", "id,,tenant_id");
-        Assertions.assertThatThrownBy(() -> createSource(options))
-                .isInstanceOf(ValidationException.class)
-                .hasMessageContaining("primary-keys")
-                .hasMessageContaining("malformed");
-
-        options.remove("primary-keys");
-        options.put(
-                "primary-keys.mapping", "inventory.orders:id;inventory.orders:tenant_id,order_id");
-        Assertions.assertThatThrownBy(() -> createSource(options))
-                .isInstanceOf(ValidationException.class)
-                .hasMessageContaining("duplicate mapping")
-                .hasMessageContaining("inventory.orders");
-
-        options.put("primary-keys.mapping", "inventory.orders:id,id");
-        Assertions.assertThatThrownBy(() -> createSource(options))
-                .isInstanceOf(ValidationException.class)
-                .hasMessageContaining("duplicate primary key column 'id'");
     }
 
     private static Map<String, String> validConnectionOptions() {

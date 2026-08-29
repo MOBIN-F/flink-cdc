@@ -46,8 +46,11 @@ source:
   topic: inventory.customers
   group-id: flink-cdc-kafka-source
   scan.startup.mode: group-offsets
-  primary-keys: id
   properties.bootstrap.servers: localhost:9092
+
+transform:
+  - source-table: inventory.\.*
+    primary-keys: id
 
 sink:
   type: starrocks
@@ -69,15 +72,13 @@ Kafka Source 配置项：
 * `topic-pattern`：用于动态发现 Topic 的正则表达式；`topic` 与 `topic-pattern` 必须且只能配置一个。
 * `group-id`（未配置 `properties.group.id` 时必填）：Kafka Consumer Group。
 * `scan.startup.mode`：`group-offsets`（默认）、`earliest-offset` 或 `latest-offset`。
-* `primary-keys`：可选，适用于所有表的默认主键列，多个字段以逗号分隔，例如 `tenant_id,id`。
-* `primary-keys.mapping`：可选，按表指定主键，格式为 `database.table:key1,key2;database.table:key`。
 * `properties.bootstrap.servers`（必填）及 `properties.*`：Kafka Consumer 参数。
 
-主键按以下优先级确定：`primary-keys.mapping` 中精确匹配的表、`primary-keys`、Debezium key schema。因此，显式配置会覆盖 Kafka 消息中的主键。通过配置提供主键时，Kafka key 可以为 null；配置的每个主键字段都必须存在于行 schema 中。
+Kafka Source 不提供主键配置项。如果 Kafka key 是带 schema 的 Debezium JSON，Source 会从中推断主键；否则需要在 Pipeline 的 `transform` 中通过 `primary-keys` 指定或覆盖。写入 StarRocks 前表必须具备主键。
 
-Kafka value 必须使用同时包含 `schema` 与 `payload` 的 Debezium JSON。不包含 schema 的 value 无法可靠识别字段类型变化，因此会被拒绝。如果两个主键参数均不适用于当前表，Kafka key 也必须使用包含 schema 的 Debezium JSON，以便 Source 推断主键。
+Kafka value 必须使用同时包含 `schema` 与 `payload` 的 Debezium JSON。不包含 schema 的 value 无法可靠识别字段类型变化，因此会被拒绝。
 
-配置的主键用于下游分区和 upsert 语义，但无法恢复 Kafka 中已经丢失的顺序；生产端仍需保证相同逻辑主键的变更进入同一个 Kafka 分区。
+主键用于下游分区和 upsert 语义，但无法恢复 Kafka 中已经丢失的顺序；生产端仍需保证相同逻辑主键的变更进入同一个 Kafka 分区。
 
 ### Schema Evolution 与多分区
 

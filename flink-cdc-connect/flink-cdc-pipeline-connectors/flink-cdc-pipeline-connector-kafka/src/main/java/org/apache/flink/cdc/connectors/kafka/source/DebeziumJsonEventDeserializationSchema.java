@@ -70,25 +70,9 @@ public class DebeziumJsonEventDeserializationSchema
 
     private static final long serialVersionUID = 1L;
 
-    private final List<String> configuredPrimaryKeys;
-    private final Map<TableId, List<String>> configuredPrimaryKeysMapping;
-
     private transient ObjectMapper mapper;
     private transient Map<TableId, TableSchemaState> globalTableSchemas;
     private transient Map<PartitionTableKey, Schema> partitionTableSchemas;
-
-    public DebeziumJsonEventDeserializationSchema() {
-        this(new ArrayList<>(), new HashMap<>());
-    }
-
-    DebeziumJsonEventDeserializationSchema(
-            List<String> primaryKeys, Map<TableId, List<String>> primaryKeysMapping) {
-        this.configuredPrimaryKeys = new ArrayList<>(primaryKeys);
-        this.configuredPrimaryKeysMapping = new HashMap<>();
-        primaryKeysMapping.forEach(
-                (tableId, keys) ->
-                        this.configuredPrimaryKeysMapping.put(tableId, new ArrayList<>(keys)));
-    }
 
     @Override
     public void open(DeserializationSchema.InitializationContext context) {
@@ -132,7 +116,8 @@ public class DebeziumJsonEventDeserializationSchema
             throw failure(record, "Debezium value does not contain a before/after row schema.");
         }
 
-        List<String> primaryKeys = resolvePrimaryKeys(record, tableId, rowSchemaNode);
+        List<String> primaryKeys = parsePrimaryKeysFromKey(record);
+        validatePrimaryKeyColumns(record, tableId, rowSchemaNode, primaryKeys);
         Schema incomingSchema = parseSchema(rowSchemaNode, primaryKeys);
         PartitionTableKey partitionTableKey =
                 new PartitionTableKey(record.topic(), record.partition(), tableId);
@@ -196,34 +181,15 @@ public class DebeziumJsonEventDeserializationSchema
         }
     }
 
-    private List<String> resolvePrimaryKeys(
-            ConsumerRecord<byte[], byte[]> record, TableId tableId, JsonNode rowSchema)
-            throws IOException {
-        List<String> tablePrimaryKeys = configuredPrimaryKeysMapping.get(tableId);
-        List<String> primaryKeys;
-        if (tablePrimaryKeys != null) {
-            primaryKeys = tablePrimaryKeys;
-        } else if (!configuredPrimaryKeys.isEmpty()) {
-            primaryKeys = configuredPrimaryKeys;
-        } else {
-            primaryKeys = parsePrimaryKeysFromKey(record);
-        }
-        validatePrimaryKeyColumns(record, tableId, rowSchema, primaryKeys);
-        return primaryKeys;
-    }
-
     private List<String> parsePrimaryKeysFromKey(ConsumerRecord<byte[], byte[]> record)
             throws IOException {
         if (record.key() == null) {
-            throw failure(
-                    record, "Debezium record key is required to infer the table primary key.");
+            return new ArrayList<>();
         }
         JsonNode keyRoot = mapper.readTree(record.key());
         JsonNode fields = keyRoot.path("schema").path("fields");
         if (!fields.isArray() || fields.isEmpty()) {
-            throw failure(
-                    record,
-                    "Debezium key must use schema+payload JSON with at least one schema field.");
+            return new ArrayList<>();
         }
         List<String> keys = new ArrayList<>();
         for (JsonNode field : fields) {
@@ -243,6 +209,9 @@ public class DebeziumJsonEventDeserializationSchema
             TableId tableId,
             JsonNode rowSchema,
             List<String> primaryKeys) {
+        if (primaryKeys.isEmpty()) {
+            return;
+        }
         List<String> rowColumns = new ArrayList<>();
         for (JsonNode field : rowSchema.path("fields")) {
             rowColumns.add(requiredText(field, "field", "Debezium row schema field"));
@@ -251,7 +220,7 @@ public class DebeziumJsonEventDeserializationSchema
             if (!rowColumns.contains(primaryKey)) {
                 throw failure(
                         record,
-                        "Configured or inferred primary key column '"
+                        "Inferred primary key column '"
                                 + primaryKey
                                 + "' does not exist in row schema for "
                                 + tableId

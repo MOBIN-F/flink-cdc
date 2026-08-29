@@ -33,7 +33,6 @@ import javax.annotation.Nullable;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
@@ -45,22 +44,16 @@ public class KafkaDataSource implements DataSource {
     private final @Nullable String topicPattern;
     private final Properties properties;
     private final String startupMode;
-    private final List<String> primaryKeys;
-    private final Map<TableId, List<String>> primaryKeysMapping;
 
     KafkaDataSource(
             List<String> topics,
             @Nullable String topicPattern,
             Properties properties,
-            String startupMode,
-            List<String> primaryKeys,
-            Map<TableId, List<String>> primaryKeysMapping) {
+            String startupMode) {
         this.topics = topics;
         this.topicPattern = topicPattern;
         this.properties = properties;
         this.startupMode = startupMode;
-        this.primaryKeys = primaryKeys;
-        this.primaryKeysMapping = primaryKeysMapping;
     }
 
     @Override
@@ -68,9 +61,7 @@ public class KafkaDataSource implements DataSource {
         KafkaSourceBuilder<Event> builder =
                 KafkaSource.<Event>builder()
                         .setProperties(properties)
-                        .setDeserializer(
-                                new DebeziumJsonEventDeserializationSchema(
-                                        primaryKeys, primaryKeysMapping));
+                        .setDeserializer(new DebeziumJsonEventDeserializationSchema());
         if (topicPattern == null) {
             builder.setTopics(topics);
         } else {
@@ -142,13 +133,5 @@ public class KafkaDataSource implements DataSource {
 
     Properties getProperties() {
         return properties;
-    }
-
-    List<String> getPrimaryKeys() {
-        return primaryKeys;
-    }
-
-    Map<TableId, List<String>> getPrimaryKeysMapping() {
-        return primaryKeysMapping;
     }
 }

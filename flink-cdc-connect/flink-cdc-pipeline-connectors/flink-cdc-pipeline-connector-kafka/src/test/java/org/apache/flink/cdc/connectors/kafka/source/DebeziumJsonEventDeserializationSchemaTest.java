@@ -23,7 +23,6 @@ import org.apache.flink.cdc.common.event.CreateTableEvent;
 import org.apache.flink.cdc.common.event.DataChangeEvent;
 import org.apache.flink.cdc.common.event.Event;
 import org.apache.flink.cdc.common.event.OperationType;
-import org.apache.flink.cdc.common.event.TableId;
 import org.apache.flink.cdc.common.types.DataTypeRoot;
 import org.apache.flink.cdc.common.types.DataTypes;
 import org.apache.flink.util.Collector;
@@ -34,8 +33,6 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 /** Tests for {@link DebeziumJsonEventDeserializationSchema}. */
@@ -294,101 +291,42 @@ class DebeziumJsonEventDeserializationSchemaTest {
     }
 
     @Test
-    void testMissingOrEmptyKeySchemaFailsClearly() {
-        String fields = field("int32", "id", false);
-        byte[] value = value(fields, "c", "null", "{\"id\":1}");
+    void testMissingKafkaKeyProducesSchemaWithoutPrimaryKeys() throws Exception {
+        DebeziumJsonEventDeserializationSchema deserializer =
+                new DebeziumJsonEventDeserializationSchema();
+        TestCollector collector = new TestCollector();
+        String fields = field("int32", "id", false) + "," + field("string", "name", true);
+
+        deserializer.deserialize(
+                record(0, 1, null, value(fields, "c", "null", row(1, "Alice"))), collector);
+
+        Assertions.assertThat(
+                        ((CreateTableEvent) collector.events.get(0)).getSchema().primaryKeys())
+                .isEmpty();
+    }
+
+    @Test
+    void testInferredPrimaryKeyMustExistInRowSchema() {
+        byte[] missingKey =
+                bytes(
+                        "{\"schema\":{\"type\":\"struct\",\"fields\":["
+                                + field("int32", "missing_id", false)
+                                + "]},\"payload\":{\"missing_id\":1}}");
 
         Assertions.assertThatThrownBy(
                         () ->
                                 new DebeziumJsonEventDeserializationSchema()
                                         .deserialize(
-                                                record(0, 1, null, value), new TestCollector()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("record key is required")
-                .hasMessageContaining("@1");
-
-        byte[] emptyKey = bytes("{\"schema\":{\"type\":\"struct\",\"fields\":[]},\"payload\":{}}");
-        Assertions.assertThatThrownBy(
-                        () ->
-                                new DebeziumJsonEventDeserializationSchema()
-                                        .deserialize(
-                                                record(0, 2, emptyKey, value), new TestCollector()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("at least one schema field")
-                .hasMessageContaining("@2");
-    }
-
-    @Test
-    void testConfiguredGlobalPrimaryKeyAllowsMissingKafkaKey() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema(
-                        Collections.singletonList("id"), Collections.emptyMap());
-        TestCollector collector = new TestCollector();
-
-        deserializer.deserialize(
-                record(
-                        0,
-                        1,
-                        null,
-                        value(
-                                field("int32", "id", false) + "," + field("string", "name", true),
-                                "c",
-                                "null",
-                                row(1, "Alice"))),
-                collector);
-
-        Assertions.assertThat(
-                        ((CreateTableEvent) collector.events.get(0)).getSchema().primaryKeys())
-                .containsExactly("id");
-    }
-
-    @Test
-    void testTablePrimaryKeysOverrideGlobalAndKafkaKey() throws Exception {
-        TableId tableId = TableId.parse("inventory.customers");
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema(
-                        Collections.singletonList("global_id"),
-                        Collections.singletonMap(tableId, Arrays.asList("tenant_id", "id")));
-        TestCollector collector = new TestCollector();
-        String fields =
-                field("int32", "id", false)
-                        + ","
-                        + field("int32", "tenant_id", false)
-                        + ","
-                        + field("int32", "global_id", false);
-
-        deserializer.deserialize(
-                record(
-                        0,
-                        1,
-                        KEY,
-                        value(fields, "c", "null", "{\"id\":1,\"tenant_id\":2,\"global_id\":3}")),
-                collector);
-
-        Assertions.assertThat(
-                        ((CreateTableEvent) collector.events.get(0)).getSchema().primaryKeys())
-                .containsExactly("tenant_id", "id");
-    }
-
-    @Test
-    void testConfiguredPrimaryKeyMustExistInRowSchema() {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema(
-                        Collections.singletonList("missing_id"), Collections.emptyMap());
-
-        Assertions.assertThatThrownBy(
-                        () ->
-                                deserializer.deserialize(
-                                        record(
-                                                0,
-                                                1,
-                                                null,
-                                                value(
-                                                        field("int32", "id", false),
-                                                        "c",
-                                                        "null",
-                                                        "{\"id\":1}")),
-                                        new TestCollector()))
+                                                record(
+                                                        0,
+                                                        1,
+                                                        missingKey,
+                                                        value(
+                                                                field("int32", "id", false),
+                                                                "c",
+                                                                "null",
+                                                                "{\"id\":1}")),
+                                                new TestCollector()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining(
                         "primary key column 'missing_id' does not exist in row schema")

@@ -45,8 +45,11 @@ source:
   topic: inventory.customers
   group-id: flink-cdc-kafka-source
   scan.startup.mode: group-offsets
-  primary-keys: id
   properties.bootstrap.servers: localhost:9092
+
+transform:
+  - source-table: inventory.\.*
+    primary-keys: id
 
 sink:
   type: starrocks
@@ -68,15 +71,13 @@ Kafka source options:
 * `topic-pattern`: a regular expression for discovering topics. Configure exactly one of `topic` and `topic-pattern`.
 * `group-id` (required unless `properties.group.id` is set): Kafka consumer group.
 * `scan.startup.mode`: `group-offsets` (default), `earliest-offset`, or `latest-offset`.
-* `primary-keys`: optional comma-separated primary key columns used as the default for all tables, for example `tenant_id,id`.
-* `primary-keys.mapping`: optional table-specific primary keys in `database.table:key1,key2;database.table:key` format.
 * `properties.bootstrap.servers` (required) and `properties.*`: Kafka consumer properties.
 
-Primary keys are resolved in this order: an exact table entry in `primary-keys.mapping`, `primary-keys`, and finally the Debezium key schema. Explicit configuration therefore overrides the primary key contained in a Kafka record. When configuration supplies the primary key, the Kafka key may be null. Every configured primary key column must exist in the row schema.
+Primary keys are not configured on the Kafka source. They are inferred from a schema-enabled Debezium record key when present. To assign or override primary keys, use a pipeline `transform` with `primary-keys`. A StarRocks sink still requires a primary key before it can create a table.
 
-The Kafka value must use Debezium JSON with the `schema` and `payload` fields. Values without an embedded schema cannot reliably describe column type changes and are rejected. If neither primary key option applies to a table, the Kafka key must also use schema-enabled Debezium JSON so that the source can infer its primary key.
+The Kafka value must use Debezium JSON with the `schema` and `payload` fields. Values without an embedded schema cannot reliably describe column type changes and are rejected.
 
-The configured primary key determines downstream partitioning and upsert semantics, but it cannot restore ordering already lost in Kafka. Producers must still send changes for the same logical primary key to the same Kafka partition.
+The primary key determines downstream partitioning and upsert semantics, but it cannot restore ordering already lost in Kafka. Producers must still send changes for the same logical primary key to the same Kafka partition.
 
 ### Schema evolution and multiple partitions
 
