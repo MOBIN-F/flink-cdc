@@ -330,7 +330,9 @@ class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
             }
             Thread.sleep(1000L);
         }
-        Assertions.fail("Failed to verify content of {}::{}. Actual: {}", DATABASE, sql, actual);
+        Assertions.fail(
+                String.format(
+                        "Failed to verify content of %s::%s. Actual: %s", DATABASE, sql, actual));
     }
 
     private List<String> fetchTableContent(String sql, int columnCount) throws Exception {

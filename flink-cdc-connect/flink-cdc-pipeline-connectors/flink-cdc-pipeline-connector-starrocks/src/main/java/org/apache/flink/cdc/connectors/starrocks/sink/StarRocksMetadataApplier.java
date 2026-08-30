@@ -382,7 +382,10 @@ public class StarRocksMetadataApplier implements MetadataApplier {
                             null);
                 }
                 catalog.alterColumnType(
-                        tableId.getSchemaName(), tableId.getTableName(), targetColumn);
+                        tableId.getSchemaName(),
+                        tableId.getTableName(),
+                        targetColumn,
+                        schemaChangeConfig.getTimeoutSecond());
             }
         } catch (Exception e) {
             if (e instanceof SchemaEvolveException) {
