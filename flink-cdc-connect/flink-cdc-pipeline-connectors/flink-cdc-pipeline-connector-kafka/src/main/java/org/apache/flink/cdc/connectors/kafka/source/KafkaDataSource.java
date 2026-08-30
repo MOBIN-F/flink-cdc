@@ -25,14 +25,19 @@ import org.apache.flink.cdc.common.source.DataSource;
 import org.apache.flink.cdc.common.source.EventSourceProvider;
 import org.apache.flink.cdc.common.source.FlinkSourceProvider;
 import org.apache.flink.cdc.common.source.MetadataAccessor;
+import org.apache.flink.cdc.connectors.kafka.json.JsonSerializationType;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.KafkaSourceBuilder;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 
+import org.apache.kafka.common.TopicPartition;
+
 import javax.annotation.Nullable;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
@@ -44,16 +49,31 @@ public class KafkaDataSource implements DataSource {
     private final @Nullable String topicPattern;
     private final Properties properties;
     private final String startupMode;
+    private final @Nullable Long startupTimestampMillis;
+    private final Map<TopicPartition, Long> specificOffsets;
+    private final @Nullable String tables;
+    private final @Nullable String tablesExclude;
+    private final JsonSerializationType valueFormat;
 
     KafkaDataSource(
             List<String> topics,
             @Nullable String topicPattern,
             Properties properties,
-            String startupMode) {
+            String startupMode,
+            @Nullable Long startupTimestampMillis,
+            Map<TopicPartition, Long> specificOffsets,
+            @Nullable String tables,
+            @Nullable String tablesExclude,
+            JsonSerializationType valueFormat) {
         this.topics = topics;
         this.topicPattern = topicPattern;
         this.properties = properties;
         this.startupMode = startupMode;
+        this.startupTimestampMillis = startupTimestampMillis;
+        this.specificOffsets = specificOffsets;
+        this.tables = tables;
+        this.tablesExclude = tablesExclude;
+        this.valueFormat = valueFormat;
     }
 
     @Override
@@ -61,7 +81,9 @@ public class KafkaDataSource implements DataSource {
         KafkaSourceBuilder<Event> builder =
                 KafkaSource.<Event>builder()
                         .setProperties(properties)
-                        .setDeserializer(new PipelineKafkaRecordDeserializationSchema());
+                        .setDeserializer(
+                                new PipelineKafkaRecordDeserializationSchema(
+                                        valueFormat, tables, tablesExclude));
         if (topicPattern == null) {
             builder.setTopics(topics);
         } else {
@@ -77,11 +99,18 @@ public class KafkaDataSource implements DataSource {
             case "group-offsets":
                 builder.setStartingOffsets(OffsetsInitializer.committedOffsets());
                 break;
+            case "timestamp":
+                builder.setStartingOffsets(OffsetsInitializer.timestamp(startupTimestampMillis));
+                break;
+            case "specific-offsets":
+                builder.setStartingOffsets(OffsetsInitializer.offsets(specificOffsets));
+                break;
             default:
                 throw new IllegalArgumentException(
                         "Unsupported scan.startup.mode '"
                                 + startupMode
-                                + "'. Supported values are earliest-offset, latest-offset, and group-offsets.");
+                                + "'. Supported values are earliest-offset, latest-offset, "
+                                + "group-offsets, timestamp, and specific-offsets.");
         }
         return FlinkSourceProvider.of(builder.build());
     }
@@ -133,5 +162,32 @@ public class KafkaDataSource implements DataSource {
 
     Properties getProperties() {
         return properties;
+    }
+
+    String getStartupMode() {
+        return startupMode;
+    }
+
+    @Nullable
+    Long getStartupTimestampMillis() {
+        return startupTimestampMillis;
+    }
+
+    Map<TopicPartition, Long> getSpecificOffsets() {
+        return Collections.unmodifiableMap(specificOffsets);
+    }
+
+    @Nullable
+    String getTables() {
+        return tables;
+    }
+
+    @Nullable
+    String getTablesExclude() {
+        return tablesExclude;
+    }
+
+    JsonSerializationType getValueFormat() {
+        return valueFormat;
     }
 }

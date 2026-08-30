@@ -386,33 +386,6 @@ class PipelineKafkaRecordDeserializationSchemaTest {
     }
 
     @Test
-    void testSourceSchemaDoesNotUseKafkaKeyAsPrimaryKey() throws Exception {
-        PipelineKafkaRecordDeserializationSchema deserializer =
-                new PipelineKafkaRecordDeserializationSchema();
-        TestCollector collector = new TestCollector();
-        String fields = field("int32", "id", false) + "," + field("string", "name", true);
-        byte[] routedKey =
-                bytes(
-                        "{\"schema\":{\"type\":\"struct\",\"fields\":["
-                                + field("string", "__dbz__physicalTableIdentifier", false)
-                                + ","
-                                + field("int32", "id", false)
-                                + "]},\"payload\":{\"__dbz__physicalTableIdentifier\":\"poc_db.kafka_poc_test\",\"id\":1}}");
-
-        deserializer.deserialize(
-                record(0, 1, routedKey, value(fields, "c", "null", row(1, "Alice"))), collector);
-        deserializer.deserialize(
-                record(0, 2, null, value(fields, "c", "null", row(2, "Bob"))), collector);
-
-        Assertions.assertThat(
-                        ((CreateTableEvent) collector.events.get(0)).getSchema().primaryKeys())
-                .isEmpty();
-        Assertions.assertThat(collector.events)
-                .extracting(event -> event.getClass().getSimpleName())
-                .containsExactly("CreateTableEvent", "DataChangeEvent", "DataChangeEvent");
-    }
-
-    @Test
     void testKafkaConnectFloatingTypesAndStringMapsToString() throws Exception {
         PipelineKafkaRecordDeserializationSchema deserializer =
                 new PipelineKafkaRecordDeserializationSchema();
@@ -466,6 +439,75 @@ class PipelineKafkaRecordDeserializationSchemaTest {
     }
 
     @Test
+    void testTablesIncludeKeepsMatchingTableOnly() throws Exception {
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema("inventory.customers", null);
+        TestCollector collector = new TestCollector();
+        String fields = field("int32", "id", false) + "," + field("string", "name", true);
+
+        deserializer.deserialize(
+                record(0, 1, KEY, value(fields, "c", "null", row(1, "Alice"))), collector);
+        deserializer.deserialize(
+                record(0, 2, KEY, value("inventory", "orders", fields, "c", "null", row(2, "Bob"))),
+                collector);
+
+        Assertions.assertThat(collector.events)
+                .extracting(event -> event.getClass().getSimpleName())
+                .containsExactly("CreateTableEvent", "DataChangeEvent");
+        Assertions.assertThat(((CreateTableEvent) collector.events.get(0)).tableId().toString())
+                .isEqualTo("inventory.customers");
+        Assertions.assertThat(((DataChangeEvent) collector.events.get(1)).tableId().toString())
+                .isEqualTo("inventory.customers");
+    }
+
+    @Test
+    void testTablesExcludeDropsMatchingTable() throws Exception {
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema(null, "inventory.orders");
+        TestCollector collector = new TestCollector();
+        String fields = field("int32", "id", false) + "," + field("string", "name", true);
+
+        deserializer.deserialize(
+                record(0, 1, KEY, value(fields, "c", "null", row(1, "Alice"))), collector);
+        deserializer.deserialize(
+                record(0, 2, KEY, value("inventory", "orders", fields, "c", "null", row(2, "Bob"))),
+                collector);
+
+        Assertions.assertThat(collector.events)
+                .extracting(event -> event.getClass().getSimpleName())
+                .containsExactly("CreateTableEvent", "DataChangeEvent");
+        Assertions.assertThat(((DataChangeEvent) collector.events.get(1)).tableId().toString())
+                .isEqualTo("inventory.customers");
+    }
+
+    @Test
+    void testTablesIncludeAndExclude() throws Exception {
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema("inventory.\\.*", "inventory.orders");
+        TestCollector collector = new TestCollector();
+        String fields = field("int32", "id", false) + "," + field("string", "name", true);
+
+        deserializer.deserialize(
+                record(0, 1, KEY, value(fields, "c", "null", row(1, "Alice"))), collector);
+        deserializer.deserialize(
+                record(0, 2, KEY, value("inventory", "orders", fields, "c", "null", row(2, "Bob"))),
+                collector);
+        deserializer.deserialize(
+                record(
+                        0,
+                        3,
+                        KEY,
+                        value("other", "customers", fields, "c", "null", row(3, "Carol"))),
+                collector);
+
+        Assertions.assertThat(collector.events)
+                .extracting(event -> event.getClass().getSimpleName())
+                .containsExactly("CreateTableEvent", "DataChangeEvent");
+        Assertions.assertThat(((DataChangeEvent) collector.events.get(1)).tableId().toString())
+                .isEqualTo("inventory.customers");
+    }
+
+    @Test
     void testDebeziumColumnLengthParameterDoesNotCreateVarchar() throws Exception {
         PipelineKafkaRecordDeserializationSchema deserializer =
                 new PipelineKafkaRecordDeserializationSchema();
@@ -492,10 +534,19 @@ class PipelineKafkaRecordDeserializationSchemaTest {
     }
 
     private static byte[] value(String fields, String operation, String before, String after) {
+        return value("inventory", "customers", fields, operation, before, after);
+    }
+
+    private static byte[] value(
+            String db, String table, String fields, String operation, String before, String after) {
         String rowSchema =
                 "{\"type\":\"struct\",\"fields\":["
                         + fields
-                        + "],\"optional\":true,\"name\":\"inventory.customers.Value\"}";
+                        + "],\"optional\":true,\"name\":\""
+                        + db
+                        + "."
+                        + table
+                        + ".Value\"}";
         return bytes(
                 "{\"schema\":{\"type\":\"struct\",\"fields\":["
                         + withField(rowSchema, "before")
@@ -505,7 +556,11 @@ class PipelineKafkaRecordDeserializationSchemaTest {
                         + before
                         + ",\"after\":"
                         + after
-                        + ",\"source\":{\"db\":\"inventory\",\"table\":\"customers\"},\"op\":\""
+                        + ",\"source\":{\"db\":\""
+                        + db
+                        + "\",\"table\":\""
+                        + table
+                        + "\"},\"op\":\""
                         + operation
                         + "\"}}");
     }

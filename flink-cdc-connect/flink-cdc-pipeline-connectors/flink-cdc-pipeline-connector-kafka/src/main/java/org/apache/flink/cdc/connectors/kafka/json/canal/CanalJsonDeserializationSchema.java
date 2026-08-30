@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.cdc.connectors.kafka.json.debezium;
+package org.apache.flink.cdc.connectors.kafka.json.canal;
 
 import org.apache.flink.cdc.common.data.RecordData;
 import org.apache.flink.cdc.common.event.AddColumnEvent;
@@ -47,20 +47,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.AFTER;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.BEFORE;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.OPERATION;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.SOURCE;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumSource.DATABASE;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumSource.TABLE;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumStruct.PAYLOAD;
-import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumStruct.SCHEMA;
+import static org.apache.flink.cdc.connectors.kafka.json.canal.CanalJsonStruct.CanalMeta.IS_DDL;
+import static org.apache.flink.cdc.connectors.kafka.json.canal.CanalJsonStruct.CanalMeta.MYSQL_TYPE;
+import static org.apache.flink.cdc.connectors.kafka.json.canal.CanalJsonStruct.CanalMeta.TS;
+import static org.apache.flink.cdc.connectors.kafka.json.canal.CanalJsonStruct.CanalStruct.DATA;
+import static org.apache.flink.cdc.connectors.kafka.json.canal.CanalJsonStruct.CanalStruct.DATABASE;
+import static org.apache.flink.cdc.connectors.kafka.json.canal.CanalJsonStruct.CanalStruct.OLD;
+import static org.apache.flink.cdc.connectors.kafka.json.canal.CanalJsonStruct.CanalStruct.PK_NAMES;
+import static org.apache.flink.cdc.connectors.kafka.json.canal.CanalJsonStruct.CanalStruct.TABLE;
+import static org.apache.flink.cdc.connectors.kafka.json.canal.CanalJsonStruct.CanalStruct.TYPE;
 
 /**
- * Deserialization schema from Debezium JSON to Flink CDC pipeline internal data structure {@link
+ * Deserialization schema from Canal JSON to Flink CDC pipeline internal data structure {@link
  * Event}.
  */
-public class DebeziumJsonDeserializationSchema implements Serializable {
+public class CanalJsonDeserializationSchema implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -68,18 +69,18 @@ public class DebeziumJsonDeserializationSchema implements Serializable {
     private final String tablesExclude;
 
     private transient ObjectMapper mapper;
-    private transient DebeziumJsonSchemaParser schemaParser;
-    private transient DebeziumJsonRecordDataConverter recordConverter;
+    private transient CanalJsonSchemaParser schemaParser;
+    private transient CanalJsonRecordDataConverter recordConverter;
     private transient Selectors includeSelectors;
     private transient Selectors excludeSelectors;
     private transient Map<TableId, TableSchemaState> globalTableSchemas;
     private transient Map<PartitionTableKey, Schema> partitionTableSchemas;
 
-    public DebeziumJsonDeserializationSchema() {
+    public CanalJsonDeserializationSchema() {
         this(null, null);
     }
 
-    public DebeziumJsonDeserializationSchema(String tables, String tablesExclude) {
+    public CanalJsonDeserializationSchema(String tables, String tablesExclude) {
         this.tables = tables;
         this.tablesExclude = tablesExclude;
     }
@@ -92,43 +93,43 @@ public class DebeziumJsonDeserializationSchema implements Serializable {
             throws IOException {
         initialize();
         JsonNode root = mapper.readTree(record.value());
-        JsonNode payload = root.path(PAYLOAD.getFieldName());
-        JsonNode source = payload.path(SOURCE.getFieldName());
-        JsonNode opNode = payload.path(OPERATION.getFieldName());
-        if (payload.isMissingNode()
-                || payload.isNull()
-                || opNode.isMissingNode()
-                || opNode.isNull()
-                || source.path(DATABASE.getFieldName()).isMissingNode()
-                || source.path(TABLE.getFieldName()).isMissingNode()) {
+        JsonNode typeNode = root.path(TYPE.getFieldName());
+        JsonNode databaseNode = root.path(DATABASE.getFieldName());
+        JsonNode tableNode = root.path(TABLE.getFieldName());
+        if (typeNode.isMissingNode()
+                || typeNode.isNull()
+                || databaseNode.isMissingNode()
+                || databaseNode.isNull()
+                || tableNode.isMissingNode()
+                || tableNode.isNull()
+                || root.path(IS_DDL.getFieldName()).asBoolean(false)) {
             return;
         }
 
-        DebeziumJsonStruct.DebeziumOperation operation =
-                DebeziumJsonStruct.DebeziumOperation.fromCode(opNode.asText());
+        CanalJsonStruct.CanalOperation operation =
+                CanalJsonStruct.CanalOperation.fromFieldName(typeNode.asText());
         if (operation == null) {
             return;
         }
-        TableId tableId =
-                TableId.tableId(
-                        source.path(DATABASE.getFieldName()).asText(),
-                        source.path(TABLE.getFieldName()).asText());
+        TableId tableId = TableId.tableId(databaseNode.asText(), tableNode.asText());
         if (!acceptTable(tableId)) {
             return;
         }
-        JsonNode rowSchemaNode =
-                schemaParser.findFieldSchema(
-                        root.path(SCHEMA.getFieldName()), AFTER.getFieldName());
-        if (rowSchemaNode == null) {
-            rowSchemaNode =
-                    schemaParser.findFieldSchema(
-                            root.path(SCHEMA.getFieldName()), BEFORE.getFieldName());
+
+        JsonNode data = root.get(DATA.getFieldName());
+        JsonNode old = root.get(OLD.getFieldName());
+        JsonNode sampleRow = firstObject(data);
+        if (sampleRow == null) {
+            sampleRow = firstObject(old);
         }
-        if (rowSchemaNode == null || !rowSchemaNode.path("fields").isArray()) {
-            throw failure(record, "Debezium value does not contain a before/after row schema.");
+        List<String> primaryKeys = schemaParser.parsePrimaryKeys(root.get(PK_NAMES.getFieldName()));
+        Schema incomingSchema =
+                schemaParser.parseSchema(
+                        root.get(MYSQL_TYPE.getFieldName()), sampleRow, primaryKeys);
+        if (incomingSchema.getColumnCount() == 0) {
+            throw failure(record, "Canal value does not contain mysqlType or row fields.");
         }
 
-        Schema incomingSchema = schemaParser.parseSchema(rowSchemaNode);
         PartitionTableKey partitionTableKey =
                 new PartitionTableKey(record.topic(), record.partition(), tableId);
         Schema partitionSchema = partitionTableSchemas.get(partitionTableKey);
@@ -143,6 +144,17 @@ public class DebeziumJsonDeserializationSchema implements Serializable {
             globalTableSchemas.put(tableId, state);
             schemaEvents.add(new CreateTableEvent(tableId, incomingSchema));
         } else {
+            if (!primaryKeys.isEmpty() && !primaryKeys.equals(state.schema.primaryKeys())) {
+                throw failure(
+                        record,
+                        "Incompatible primary key change for table '"
+                                + tableId
+                                + "': "
+                                + state.schema.primaryKeys()
+                                + " versus "
+                                + primaryKeys
+                                + ".");
+            }
             evolveGlobalSchema(record, tableId, state, incomingSchema, schemaEvents);
         }
         partitionTableSchemas.put(partitionTableKey, incomingSchema);
@@ -150,29 +162,60 @@ public class DebeziumJsonDeserializationSchema implements Serializable {
             out.collect(schemaEvent);
         }
 
+        if (data == null || !data.isArray()) {
+            return;
+        }
         Map<String, String> meta = new LinkedHashMap<>();
         meta.put("topic", record.topic());
         meta.put("partition", String.valueOf(record.partition()));
         meta.put("offset", String.valueOf(record.offset()));
-        RecordData before =
-                recordConverter.convertRecord(payload.get(BEFORE.getFieldName()), state.schema);
-        RecordData after =
-                recordConverter.convertRecord(payload.get(AFTER.getFieldName()), state.schema);
+        JsonNode tsNode = root.get(TS.getFieldName());
+        if (tsNode != null && !tsNode.isNull() && !tsNode.isMissingNode()) {
+            meta.put("ts", tsNode.asText());
+        }
+        for (int i = 0; i < data.size(); i++) {
+            JsonNode afterRow = data.get(i);
+            JsonNode oldRow = old != null && old.isArray() && i < old.size() ? old.get(i) : null;
+            emitDataChange(tableId, operation, afterRow, oldRow, state.schema, meta, out);
+        }
+    }
+
+    private void emitDataChange(
+            TableId tableId,
+            CanalJsonStruct.CanalOperation operation,
+            JsonNode afterRow,
+            JsonNode oldRow,
+            Schema schema,
+            Map<String, String> meta,
+            Collector<Event> out) {
         switch (operation) {
-            case READ:
-            case CREATE:
-                out.collect(DataChangeEvent.insertEvent(tableId, require(after, "after"), meta));
+            case INSERT:
+                out.collect(
+                        DataChangeEvent.insertEvent(
+                                tableId,
+                                require(recordConverter.convertRecord(afterRow, schema), "data"),
+                                meta));
                 break;
             case UPDATE:
                 out.collect(
                         DataChangeEvent.updateEvent(
-                                tableId, require(before, "before"), require(after, "after"), meta));
+                                tableId,
+                                require(
+                                        recordConverter.convertUpdateBefore(
+                                                afterRow, oldRow, schema),
+                                        "old"),
+                                require(recordConverter.convertRecord(afterRow, schema), "data"),
+                                meta));
                 break;
             case DELETE:
-                out.collect(DataChangeEvent.deleteEvent(tableId, require(before, "before"), meta));
+                out.collect(
+                        DataChangeEvent.deleteEvent(
+                                tableId,
+                                require(recordConverter.convertRecord(afterRow, schema), "data"),
+                                meta));
                 break;
             default:
-                throw new IllegalStateException("Unexpected Debezium operation " + operation);
+                throw new IllegalStateException("Unexpected Canal operation " + operation);
         }
     }
 
@@ -181,8 +224,8 @@ public class DebeziumJsonDeserializationSchema implements Serializable {
             return;
         }
         mapper = new ObjectMapper();
-        schemaParser = new DebeziumJsonSchemaParser();
-        recordConverter = new DebeziumJsonRecordDataConverter();
+        schemaParser = new CanalJsonSchemaParser();
+        recordConverter = new CanalJsonRecordDataConverter();
         globalTableSchemas = new HashMap<>();
         partitionTableSchemas = new HashMap<>();
         if (tables != null) {
@@ -201,14 +244,20 @@ public class DebeziumJsonDeserializationSchema implements Serializable {
         return excludeSelectors == null || !excludeSelectors.isMatch(tableId);
     }
 
+    private JsonNode firstObject(JsonNode array) {
+        if (array == null || !array.isArray() || array.size() == 0) {
+            return null;
+        }
+        JsonNode first = array.get(0);
+        return first != null && first.isObject() ? first : null;
+    }
+
     private void validatePartitionEvolution(
             ConsumerRecord<byte[], byte[]> record, Schema previous, Schema incoming) {
         Map<String, Column> incomingColumns = columnsByName(incoming);
         for (Column previousColumn : previous.getColumns()) {
             Column incomingColumn = incomingColumns.get(previousColumn.getName());
             if (incomingColumn == null) {
-                // Dropped or renamed source columns stay in the widest schema. New names are
-                // added later; missing values are coerced to null.
                 continue;
             }
             DataType merged = mergeType(previousColumn.getType(), incomingColumn.getType());
@@ -304,8 +353,6 @@ public class DebeziumJsonDeserializationSchema implements Serializable {
         if (currentNullable.equals(incomingNullable)) {
             return currentNullable;
         }
-        // STRING is the universal widening target used by SchemaMergingUtils. Replay of an
-        // INT → STRING change (MySQL ALTER to VARCHAR) must follow the same rule.
         if (incoming.is(DataTypeRoot.VARCHAR)) {
             return DataTypes.STRING().copy(nullable);
         }
@@ -376,7 +423,7 @@ public class DebeziumJsonDeserializationSchema implements Serializable {
     }
 
     private RecordData require(RecordData record, String name) {
-        return Objects.requireNonNull(record, "Debezium operation requires non-null " + name + ".");
+        return Objects.requireNonNull(record, "Canal operation requires non-null " + name + ".");
     }
 
     private IllegalArgumentException failure(

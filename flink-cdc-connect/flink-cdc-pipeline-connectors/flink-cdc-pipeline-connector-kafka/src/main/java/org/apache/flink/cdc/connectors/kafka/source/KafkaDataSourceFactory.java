@@ -26,10 +26,13 @@ import org.apache.flink.cdc.common.factories.FactoryHelper;
 import org.apache.flink.cdc.common.source.DataSource;
 import org.apache.flink.table.api.ValidationException;
 
+import org.apache.kafka.common.TopicPartition;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -91,11 +94,79 @@ public class KafkaDataSourceFactory implements DataSourceFactory {
                     "Kafka consumer group must be configured with 'group-id' or 'properties.group.id'.");
         }
 
+        String startupMode =
+                configuration
+                        .get(KafkaDataSourceOptions.SCAN_STARTUP_MODE)
+                        .toLowerCase(Locale.ROOT);
+        Long startupTimestampMillis =
+                configuration
+                        .getOptional(KafkaDataSourceOptions.SCAN_STARTUP_TIMESTAMP_MILLIS)
+                        .orElse(null);
+        String specificOffsetsSpec =
+                configuration
+                        .getOptional(KafkaDataSourceOptions.SCAN_STARTUP_SPECIFIC_OFFSETS)
+                        .orElse(null);
+        Map<TopicPartition, Long> specificOffsets = Collections.emptyMap();
+        switch (startupMode) {
+            case "earliest-offset":
+            case "latest-offset":
+            case "group-offsets":
+                if (startupTimestampMillis != null) {
+                    throw new ValidationException(
+                            "Option 'scan.startup.timestamp-millis' is only supported when 'scan.startup.mode' is 'timestamp'.");
+                }
+                if (specificOffsetsSpec != null) {
+                    throw new ValidationException(
+                            "Option 'scan.startup.specific-offsets' is only supported when 'scan.startup.mode' is 'specific-offsets'.");
+                }
+                break;
+            case "timestamp":
+                if (startupTimestampMillis == null) {
+                    throw new ValidationException(
+                            "Option 'scan.startup.timestamp-millis' is required when 'scan.startup.mode' is 'timestamp'.");
+                }
+                if (specificOffsetsSpec != null) {
+                    throw new ValidationException(
+                            "Option 'scan.startup.specific-offsets' is only supported when 'scan.startup.mode' is 'specific-offsets'.");
+                }
+                break;
+            case "specific-offsets":
+                if (specificOffsetsSpec == null || specificOffsetsSpec.trim().isEmpty()) {
+                    throw new ValidationException(
+                            "Option 'scan.startup.specific-offsets' is required when 'scan.startup.mode' is 'specific-offsets'.");
+                }
+                if (startupTimestampMillis != null) {
+                    throw new ValidationException(
+                            "Option 'scan.startup.timestamp-millis' is only supported when 'scan.startup.mode' is 'timestamp'.");
+                }
+                String defaultTopic = topics.size() == 1 ? topics.get(0) : null;
+                try {
+                    specificOffsets = KafkaStartupOffsets.parse(specificOffsetsSpec, defaultTopic);
+                } catch (IllegalArgumentException e) {
+                    throw new ValidationException(e.getMessage(), e);
+                }
+                break;
+            default:
+                throw new ValidationException(
+                        "Unsupported scan.startup.mode '"
+                                + startupMode
+                                + "'. Supported values are earliest-offset, latest-offset, "
+                                + "group-offsets, timestamp, and specific-offsets.");
+        }
+
         return new KafkaDataSource(
                 topics,
                 topicPattern,
                 properties,
-                configuration.get(KafkaDataSourceOptions.SCAN_STARTUP_MODE));
+                startupMode,
+                startupTimestampMillis,
+                specificOffsets,
+                blankToNull(configuration.getOptional(KafkaDataSourceOptions.TABLES).orElse(null)),
+                blankToNull(
+                        configuration
+                                .getOptional(KafkaDataSourceOptions.TABLES_EXCLUDE)
+                                .orElse(null)),
+                configuration.get(KafkaDataSourceOptions.VALUE_FORMAT));
     }
 
     @Override
@@ -115,6 +186,18 @@ public class KafkaDataSourceFactory implements DataSourceFactory {
                         KafkaDataSourceOptions.TOPIC,
                         KafkaDataSourceOptions.TOPIC_PATTERN,
                         KafkaDataSourceOptions.GROUP_ID,
-                        KafkaDataSourceOptions.SCAN_STARTUP_MODE));
+                        KafkaDataSourceOptions.SCAN_STARTUP_MODE,
+                        KafkaDataSourceOptions.SCAN_STARTUP_TIMESTAMP_MILLIS,
+                        KafkaDataSourceOptions.SCAN_STARTUP_SPECIFIC_OFFSETS,
+                        KafkaDataSourceOptions.TABLES,
+                        KafkaDataSourceOptions.TABLES_EXCLUDE,
+                        KafkaDataSourceOptions.VALUE_FORMAT));
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
     }
 }

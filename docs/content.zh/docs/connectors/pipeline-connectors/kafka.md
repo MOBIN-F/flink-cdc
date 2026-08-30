@@ -26,13 +26,13 @@ under the License.
 
 # Kafka Pipeline 连接器
 
-Kafka Pipeline 连接器可以用作 Pipeline 的 *Data Source* 或 *Data Sink*。作为 Source 时，它消费包含 Kafka Connect Schema 的 Debezium JSON，并将推断出的表结构变化转换为 Pipeline Schema 事件。
+Kafka Pipeline 连接器可以用作 Pipeline 的 *Data Source* 或 *Data Sink*。作为 Source 时，它消费 Debezium JSON 或 Canal JSON Changelog，并将推断出的表结构变化转换为 Pipeline Schema 事件。
 
 ## 连接器的功能
 * 自动建表
 * 表结构变更同步
 * 数据实时同步
-* 消费 Debezium JSON Changelog
+* 消费 Debezium JSON 或 Canal JSON Changelog
 
 Kafka Source
 ----------------
@@ -71,12 +71,19 @@ Kafka Source 配置项：
 * `topic`：单个 Topic 或逗号分隔的 Topic 列表。
 * `topic-pattern`：用于动态发现 Topic 的正则表达式；`topic` 与 `topic-pattern` 必须且只能配置一个。
 * `group-id`（未配置 `properties.group.id` 时必填）：Kafka Consumer Group。
-* `scan.startup.mode`：`group-offsets`（默认）、`earliest-offset` 或 `latest-offset`。
+* `scan.startup.mode`：`group-offsets`（默认）、`earliest-offset`、`latest-offset`、`timestamp` 或 `specific-offsets`。
+* `scan.startup.timestamp-millis`：当 `scan.startup.mode` 为 `timestamp` 时必填。
+* `scan.startup.specific-offsets`：当 `scan.startup.mode` 为 `specific-offsets` 时必填。仅配置一个 `topic` 时可写 `partition:0,offset:42;partition:1,offset:300`；多 Topic 或 `topic-pattern` 时每条必须带 topic，例如 `topic:dbz.customers,partition:0,offset:42`。未列出的分区从 earliest offset 开始。
+* `tables`：可选，按 Debezium `source.db`/`source.table` 或 Canal `database`/`table` 做包含过滤，语法与 MySQL source 的 `tables` 相同，例如 `inventory.customers` 或 `inventory.\\.*`。
+* `tables.exclude`：可选，排除匹配的表，可单独使用，也可与 `tables` 同时使用。
+* `value.format`：`debezium-json`（默认）或 `canal-json`。
 * `properties.bootstrap.servers`（必填）及 `properties.*`：Kafka Consumer 参数。
 
-Kafka Source 不推断主键。请在 Pipeline 的 `transform` 中通过 `primary-keys` 指定。写入 StarRocks 前表必须具备主键。
+Debezium JSON 不推断主键，请在 Pipeline 的 `transform` 中通过 `primary-keys` 指定。Canal JSON 会使用消息里的 `pkNames` 作为主键，仍可用 transform 覆盖。写入 StarRocks 前表必须具备主键。
 
-Kafka value 必须使用同时包含 `schema` 与 `payload` 的 Debezium JSON。不包含 schema 的 value 无法可靠识别字段类型变化，因此会被拒绝。
+Debezium JSON 的 value 必须同时包含 `schema` 与 `payload`。不包含 schema 的 value 无法可靠识别字段类型变化，因此会被拒绝。
+
+Canal JSON 用 `mysqlType` 推断列类型、用 `pkNames` 作为主键。只消费 `INSERT`/`UPDATE`/`DELETE`；`isDdl=true` 以及其他 `type` 会被跳过。Canal 的 `UPDATE` 往往只在 `old` 里放变更列，Source 会用 `old` 覆盖 `data` 拼出完整 before。
 
 Transform 中的主键用于下游分区和 upsert 语义，但无法恢复 Kafka 中已经丢失的顺序；生产端仍需保证相同逻辑主键的变更进入同一个 Kafka 分区。
 

@@ -26,11 +26,11 @@ under the License.
 
 # Kafka Pipeline Connector
 
-The Kafka Pipeline connector can be used as a *Data Source* or *Data Sink* of the pipeline. As a source, it consumes Debezium JSON records with embedded Kafka Connect schemas and converts inferred schema changes into pipeline schema events.
+The Kafka Pipeline connector can be used as a *Data Source* or *Data Sink* of the pipeline. As a source, it consumes Debezium JSON or Canal JSON changelog records and converts inferred schema changes into pipeline schema events.
 
 ## What can the connector do?
 * Data synchronization
-* Consume Debezium JSON changelog records
+* Consume Debezium JSON or Canal JSON changelog records
 * Infer create table, add column, and compatible column type widening events
 
 Kafka Source
@@ -70,12 +70,19 @@ Kafka source options:
 * `topic`: one topic or a comma-separated topic list.
 * `topic-pattern`: a regular expression for discovering topics. Configure exactly one of `topic` and `topic-pattern`.
 * `group-id` (required unless `properties.group.id` is set): Kafka consumer group.
-* `scan.startup.mode`: `group-offsets` (default), `earliest-offset`, or `latest-offset`.
+* `scan.startup.mode`: `group-offsets` (default), `earliest-offset`, `latest-offset`, `timestamp`, or `specific-offsets`.
+* `scan.startup.timestamp-millis`: required when `scan.startup.mode` is `timestamp`.
+* `scan.startup.specific-offsets`: required when `scan.startup.mode` is `specific-offsets`. Use `partition:0,offset:42;partition:1,offset:300` when exactly one `topic` is configured, or include a topic in each entry such as `topic:dbz.customers,partition:0,offset:42`. Partitions that are not listed start from the earliest offset.
+* `tables`: optional inclusion patterns matched against Debezium `source.db`/`source.table` or Canal `database`/`table` (same selector syntax as the MySQL source, for example `inventory.customers` or `inventory.\\.*`).
+* `tables.exclude`: optional exclusion patterns. Can be used alone or together with `tables`.
+* `value.format`: `debezium-json` (default) or `canal-json`.
 * `properties.bootstrap.servers` (required) and `properties.*`: Kafka consumer properties.
 
-Primary keys are not inferred from Debezium JSON. Assign them with a pipeline `transform` `primary-keys` option. A StarRocks sink still requires a primary key before it can create a table.
+Primary keys are not inferred from Debezium JSON. Assign them with a pipeline `transform` `primary-keys` option. Canal JSON uses `pkNames` as the table primary key when present; transform can still override them. A StarRocks sink still requires a primary key before it can create a table.
 
-The Kafka value must use Debezium JSON with the `schema` and `payload` fields. Values without an embedded schema cannot reliably describe column type changes and are rejected.
+Debezium JSON values must include the `schema` and `payload` fields. Values without an embedded schema cannot reliably describe column type changes and are rejected.
+
+Canal JSON values use `mysqlType` for column types and `pkNames` for primary keys. `INSERT`/`UPDATE`/`DELETE` are consumed; `isDdl=true` and other `type` values are skipped. Canal `UPDATE` records often put only changed columns in `old`: the source builds a full before image by overlaying `old` onto `data`.
 
 The transform primary key determines downstream partitioning and upsert semantics, but it cannot restore ordering already lost in Kafka. Producers must still send changes for the same logical primary key to the same Kafka partition.
 
