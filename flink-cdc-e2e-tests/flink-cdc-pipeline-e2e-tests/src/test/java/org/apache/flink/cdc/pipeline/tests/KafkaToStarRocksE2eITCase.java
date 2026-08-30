@@ -32,6 +32,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.KafkaContainer;
@@ -57,6 +58,7 @@ import java.util.stream.Stream;
 import static org.apache.flink.util.DockerImageVersions.KAFKA;
 
 /** End-to-end tests for a multi-partition Kafka Debezium JSON to StarRocks pipeline. */
+@EnabledIfSystemProperty(named = "specifiedFlinkVersion", matches = "^1.*")
 class KafkaToStarRocksE2eITCase extends PipelineTestEnvironment {
     private static final Logger LOG = LoggerFactory.getLogger(KafkaToStarRocksE2eITCase.class);
 

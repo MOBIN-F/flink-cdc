@@ -42,11 +42,14 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -192,6 +195,109 @@ class SchemaCoordinatorTest {
     }
 
     @Test
+    void testDoesNotLoseRequestArrivingBeforeDeferredRequestsArePromoted() throws Exception {
+        BlockingSchemaChangeCompletionExecutor coordinatorExecutor =
+                new BlockingSchemaChangeCompletionExecutor();
+        MockedOperatorCoordinatorContext context = mockedContext(PARALLELISM);
+        BlockingMetadataApplier metadataApplier = new BlockingMetadataApplier();
+        SchemaCoordinator coordinator = coordinator(context, coordinatorExecutor, metadataApplier);
+
+        CreateTableEvent createTableEvent = createTableEvent();
+        AddColumnEvent deferredEvent = addColumnEvent("name");
+        AddColumnEvent concurrentEvent = addColumnEvent("email");
+
+        try {
+            coordinator.start();
+
+            List<CompletableFuture<?>> createFutures =
+                    requestBroadcast(coordinator, 0, createTableEvent, PARALLELISM);
+            flushAll(coordinator, PARALLELISM);
+            metadataApplier.awaitApplying();
+
+            List<CompletableFuture<?>> deferredFutures =
+                    requestBroadcast(coordinator, 0, deferredEvent, PARALLELISM);
+            coordinatorExecutor.awaitQuiescence();
+
+            coordinatorExecutor.blockNextSchemaThreadSubmission();
+            metadataApplier.releaseApplying();
+            coordinatorExecutor.awaitBlockedSubmission();
+
+            CompletableFuture<?> concurrentSubtaskZeroFuture =
+                    coordinator.handleCoordinationRequest(
+                            new SchemaChangeRequest(0, 0, concurrentEvent));
+            coordinatorExecutor.awaitQuiescence();
+            coordinatorExecutor.releaseBlockedSubmission();
+
+            awaitAll(createFutures);
+            flushAll(coordinator, PARALLELISM);
+            awaitAll(deferredFutures);
+
+            CompletableFuture<?> concurrentSubtaskOneFuture =
+                    coordinator.handleCoordinationRequest(
+                            new SchemaChangeRequest(0, 1, concurrentEvent));
+            flushAll(coordinator, PARALLELISM);
+            concurrentSubtaskZeroFuture.get(5, TimeUnit.SECONDS);
+            concurrentSubtaskOneFuture.get(5, TimeUnit.SECONDS);
+
+            assertThat(metadataApplier.getSchemaChangeEvents())
+                    .containsExactly(createTableEvent, deferredEvent, concurrentEvent);
+            assertThat(context.isJobFailed()).isFalse();
+        } finally {
+            metadataApplier.releaseApplying();
+            coordinatorExecutor.releaseBlockedSubmission();
+            coordinator.close();
+            coordinatorExecutor.shutdownNow();
+        }
+    }
+
+    @Test
+    void testFailsCurrentAndDeferredRequestsWhenDeferredPromotionFails() throws Exception {
+        ExecutorService coordinatorExecutor = Executors.newSingleThreadExecutor();
+        MockedOperatorCoordinatorContext context = mockedContext(PARALLELISM);
+        BlockingMetadataApplier metadataApplier = new BlockingMetadataApplier();
+        SchemaCoordinator coordinator = coordinator(context, coordinatorExecutor, metadataApplier);
+
+        CreateTableEvent createTableEvent = createTableEvent();
+        AddColumnEvent invalidDeferredEvent =
+                new AddColumnEvent(
+                        TableId.parse("unknown.table"),
+                        Collections.singletonList(
+                                new AddColumnEvent.ColumnWithPosition(
+                                        Column.physicalColumn("name", DataTypes.STRING()),
+                                        AddColumnEvent.ColumnPosition.LAST,
+                                        null)));
+
+        try {
+            coordinator.start();
+
+            List<CompletableFuture<?>> createFutures =
+                    requestBroadcast(coordinator, 0, createTableEvent, PARALLELISM);
+            flushAll(coordinator, PARALLELISM);
+            metadataApplier.awaitApplying();
+
+            List<CompletableFuture<?>> invalidFutures =
+                    requestBroadcast(coordinator, 0, invalidDeferredEvent, PARALLELISM);
+            awaitExecutorQuiescence(coordinatorExecutor);
+            metadataApplier.releaseApplying();
+
+            for (CompletableFuture<?> future : createFutures) {
+                assertThatThrownBy(() -> future.get(5, TimeUnit.SECONDS))
+                        .isInstanceOf(ExecutionException.class);
+            }
+            for (CompletableFuture<?> future : invalidFutures) {
+                assertThatThrownBy(() -> future.get(5, TimeUnit.SECONDS))
+                        .isInstanceOf(ExecutionException.class);
+            }
+            assertThat(context.isJobFailed()).isTrue();
+            assertThat(metadataApplier.getSchemaChangeEvents()).containsExactly(createTableEvent);
+        } finally {
+            metadataApplier.releaseApplying();
+            coordinator.close();
+            coordinatorExecutor.shutdownNow();
+        }
+    }
+
+    @Test
     void testFailsDeferredRequestsWhenParallelEvolutionFails() throws Exception {
         ExecutorService coordinatorExecutor = Executors.newSingleThreadExecutor();
         MockedOperatorCoordinatorContext context = mockedContext(PARALLELISM);
@@ -311,5 +417,104 @@ class SchemaCoordinatorTest {
         assertThat(metadataApplier.getSchemaChangeEvents())
                 .as("Timed out waiting for %s applied schema change events", count)
                 .hasSizeGreaterThanOrEqualTo(count);
+    }
+
+    private static void awaitExecutorQuiescence(ExecutorService executor) throws Exception {
+        CompletableFuture<Void> quiescence = new CompletableFuture<>();
+        executor.execute(() -> quiescence.complete(null));
+        quiescence.get(5, TimeUnit.SECONDS);
+    }
+
+    private static class BlockingMetadataApplier extends CollectingMetadataApplier {
+        private final CountDownLatch applying = new CountDownLatch(1);
+        private final CountDownLatch releaseApplying = new CountDownLatch(1);
+
+        private BlockingMetadataApplier() {
+            super(null);
+        }
+
+        @Override
+        public void applySchemaChange(SchemaChangeEvent schemaChangeEvent) {
+            super.applySchemaChange(schemaChangeEvent);
+            applying.countDown();
+            try {
+                releaseApplying.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            }
+        }
+
+        void awaitApplying() throws InterruptedException {
+            assertThat(applying.await(5, TimeUnit.SECONDS)).isTrue();
+        }
+
+        void releaseApplying() {
+            releaseApplying.countDown();
+        }
+    }
+
+    private static class BlockingSchemaChangeCompletionExecutor extends AbstractExecutorService {
+        private final ExecutorService delegate = Executors.newSingleThreadExecutor();
+        private final Thread testThread = Thread.currentThread();
+        private final AtomicBoolean blockNextSchemaThreadSubmission = new AtomicBoolean();
+        private final CountDownLatch blockedSubmission = new CountDownLatch(1);
+        private final CountDownLatch releaseBlockedSubmission = new CountDownLatch(1);
+
+        @Override
+        public void execute(Runnable command) {
+            if (Thread.currentThread() != testThread
+                    && blockNextSchemaThreadSubmission.compareAndSet(true, false)) {
+                blockedSubmission.countDown();
+                try {
+                    releaseBlockedSubmission.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(e);
+                }
+            }
+            delegate.execute(command);
+        }
+
+        void blockNextSchemaThreadSubmission() {
+            blockNextSchemaThreadSubmission.set(true);
+        }
+
+        void awaitBlockedSubmission() throws Exception {
+            assertThat(blockedSubmission.await(5, TimeUnit.SECONDS)).isTrue();
+        }
+
+        void releaseBlockedSubmission() {
+            releaseBlockedSubmission.countDown();
+        }
+
+        void awaitQuiescence() throws Exception {
+            awaitExecutorQuiescence(this);
+        }
+
+        @Override
+        public void shutdown() {
+            delegate.shutdown();
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            return delegate.shutdownNow();
+        }
+
+        @Override
+        public boolean isShutdown() {
+            return delegate.isShutdown();
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return delegate.isTerminated();
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+            return delegate.awaitTermination(timeout, unit);
+        }
     }
 }
