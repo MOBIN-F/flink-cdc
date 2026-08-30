@@ -19,45 +19,28 @@ package org.apache.flink.cdc.connectors.paimon.sink.v2.bucket;
 
 import org.apache.flink.cdc.common.event.Event;
 import org.apache.flink.cdc.common.event.FlushEvent;
-import org.apache.flink.cdc.common.event.SchemaChangeEventType;
-import org.apache.flink.cdc.common.event.TableId;
 import org.apache.flink.cdc.runtime.operators.AbstractStreamOperatorAdapter;
 import org.apache.flink.cdc.runtime.operators.schema.regular.SchemaOperator;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
-/**
- * Align {@link FlushEvent}s broadcasted by {@link BucketAssignOperator}.
- *
- * <p>Schema operator subtasks participate in every evolution round, but they may currently process
- * {@link FlushEvent}s from different source partitions (for example two Kafka tables whose first
- * {@code CREATE TABLE} events arrive on different partitions). Alignment therefore waits until
- * every bucket-assigner has reported in the current round, instead of requiring all assigners to
- * flush the same source partition.
- */
+/** Align {@link FlushEvent}s broadcasted by {@link BucketAssignOperator}. */
 public class FlushEventAlignmentOperator extends AbstractStreamOperatorAdapter<Event>
         implements OneInputStreamOperator<Event, Event> {
 
     private transient int totalTasksNumber;
 
     /**
-     * Bucket-assigner subtask ids that have reported a {@link FlushEvent} in the current evolution
-     * round. {@link SchemaOperator} subtasks always join the same round, even when they flush
-     * different source partitions.
+     * Key: subtask id of {@link SchemaOperator}, Value: subtask ids of {@link
+     * BucketAssignOperator}.
      */
-    private transient Set<Integer> flushedAssigners;
-
-    private transient Set<TableId> pendingTableIds;
-
-    private transient int pendingSourceSubTaskId;
-
-    private transient SchemaChangeEventType pendingType;
+    private transient Map<Integer, Set<Integer>> sourceTaskIdToAssignBucketSubTaskIds;
 
     private transient int currentSubTaskId;
 
@@ -71,7 +54,7 @@ public class FlushEventAlignmentOperator extends AbstractStreamOperatorAdapter<E
         super.open();
         this.totalTasksNumber = getRuntimeContext().getTaskInfo().getNumberOfParallelSubtasks();
         this.currentSubTaskId = getRuntimeContext().getTaskInfo().getIndexOfThisSubtask();
-        resetBarrier();
+        sourceTaskIdToAssignBucketSubTaskIds = new HashMap<>();
     }
 
     @Override
@@ -79,44 +62,31 @@ public class FlushEventAlignmentOperator extends AbstractStreamOperatorAdapter<E
         Event event = streamRecord.getValue();
         if (event instanceof BucketWrapperFlushEvent) {
             BucketWrapperFlushEvent bucketWrapperFlushEvent = (BucketWrapperFlushEvent) event;
-            flushedAssigners.add(bucketWrapperFlushEvent.getBucketAssignTaskId());
-            pendingTableIds.addAll(bucketWrapperFlushEvent.getTableIds());
-            if (pendingSourceSubTaskId < 0) {
-                pendingSourceSubTaskId = bucketWrapperFlushEvent.getSourceSubTaskId();
-            }
-            SchemaChangeEventType eventType = bucketWrapperFlushEvent.getSchemaChangeEventType();
-            if (pendingType == null || eventType == SchemaChangeEventType.CREATE_TABLE) {
-                pendingType = eventType;
-            }
-            if (flushedAssigners.size() == totalTasksNumber) {
-                LOG.info(
-                        "{} send FlushEvent of source {} after assigners {} reported",
-                        currentSubTaskId,
-                        pendingSourceSubTaskId,
-                        flushedAssigners);
+            int sourceSubTaskId = bucketWrapperFlushEvent.getSourceSubTaskId();
+            Set<Integer> subTaskIds =
+                    sourceTaskIdToAssignBucketSubTaskIds.getOrDefault(
+                            sourceSubTaskId, new HashSet<>());
+            int subtaskId = bucketWrapperFlushEvent.getBucketAssignTaskId();
+            subTaskIds.add(subtaskId);
+            if (subTaskIds.size() == totalTasksNumber) {
+                LOG.info("{} send FlushEvent of {}", currentSubTaskId, sourceSubTaskId);
                 output.collect(
                         new StreamRecord<>(
                                 new FlushEvent(
-                                        pendingSourceSubTaskId,
-                                        new ArrayList<>(pendingTableIds),
-                                        pendingType)));
-                resetBarrier();
+                                        sourceSubTaskId,
+                                        bucketWrapperFlushEvent.getTableIds(),
+                                        bucketWrapperFlushEvent.getSchemaChangeEventType())));
+                sourceTaskIdToAssignBucketSubTaskIds.remove(sourceSubTaskId);
             } else {
                 LOG.info(
-                        "{} collect FlushEvent of {} with assigner {}",
+                        "{} collect FlushEvent of {} with subtask {}",
                         currentSubTaskId,
-                        bucketWrapperFlushEvent.getSourceSubTaskId(),
-                        bucketWrapperFlushEvent.getBucketAssignTaskId());
+                        sourceSubTaskId,
+                        +subtaskId);
+                sourceTaskIdToAssignBucketSubTaskIds.put(sourceSubTaskId, subTaskIds);
             }
         } else {
             output.collect(streamRecord);
         }
-    }
-
-    private void resetBarrier() {
-        flushedAssigners = new HashSet<>();
-        pendingTableIds = new LinkedHashSet<>();
-        pendingSourceSubTaskId = -1;
-        pendingType = null;
     }
 }
