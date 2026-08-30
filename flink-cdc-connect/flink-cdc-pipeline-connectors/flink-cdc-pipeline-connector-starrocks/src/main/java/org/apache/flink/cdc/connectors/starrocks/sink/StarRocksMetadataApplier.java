@@ -365,9 +365,10 @@ public class StarRocksMetadataApplier implements MetadataApplier {
                     throw new SchemaEvolveException(
                             event, "Cannot alter non-existing column " + entry.getKey(), null);
                 }
-                if (isSameOrWider(existingColumn, targetColumn)) {
+                if (isSameOrWider(existingColumn, targetColumn)
+                        && isSameOrWider(targetColumn, existingColumn)) {
                     LOG.info(
-                            "Column {} is already at type {} or wider, skipping replayed alter column event.",
+                            "Column {} is already at type {}, skipping replayed alter column event.",
                             entry.getKey(),
                             existingColumn.getDataType());
                     continue;

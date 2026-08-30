@@ -29,6 +29,8 @@ import org.apache.flink.cdc.common.schema.Schema;
 import org.apache.flink.cdc.common.types.BigIntType;
 import org.apache.flink.cdc.common.types.BooleanType;
 import org.apache.flink.cdc.common.types.DecimalType;
+import org.apache.flink.cdc.common.types.DoubleType;
+import org.apache.flink.cdc.common.types.FloatType;
 import org.apache.flink.cdc.common.types.IntType;
 import org.apache.flink.cdc.common.types.SmallIntType;
 import org.apache.flink.cdc.common.types.TimeType;
@@ -221,6 +223,52 @@ class StarRocksMetadataApplierTest {
         Assertions.assertThat(actualTable.getColumn("id").getDataType())
                 .isEqualToIgnoringCase("bigint");
         Assertions.assertThat(actualTable.getColumn("new_col")).isNotNull();
+    }
+
+    @Test
+    void testRejectNarrowingAlterColumnType() {
+        TableId tableId = TableId.parse("test.narrow_alter_tbl");
+        Schema schema =
+                Schema.newBuilder()
+                        .physicalColumn("id", new BigIntType(false))
+                        .physicalColumn("number", new DoubleType())
+                        .primaryKey("id")
+                        .build();
+        metadataApplier.applySchemaChange(new CreateTableEvent(tableId, schema));
+
+        Assertions.assertThatThrownBy(
+                        () ->
+                                metadataApplier.applySchemaChange(
+                                        new AlterColumnTypeEvent(
+                                                tableId,
+                                                Collections.singletonMap(
+                                                        "id", new IntType(false)))))
+                .isInstanceOfSatisfying(
+                        SchemaEvolveException.class,
+                        exception ->
+                                Assertions.assertThat(exception.getExceptionMessage())
+                                        .contains("Cannot safely widen"));
+
+        Assertions.assertThatThrownBy(
+                        () ->
+                                metadataApplier.applySchemaChange(
+                                        new AlterColumnTypeEvent(
+                                                tableId,
+                                                Collections.singletonMap(
+                                                        "number", new FloatType()))))
+                .isInstanceOfSatisfying(
+                        SchemaEvolveException.class,
+                        exception ->
+                                Assertions.assertThat(exception.getExceptionMessage())
+                                        .contains("Cannot safely widen"));
+
+        StarRocksTable actualTable =
+                catalog.getTable(tableId.getSchemaName(), tableId.getTableName()).orElse(null);
+        Assertions.assertThat(actualTable).isNotNull();
+        Assertions.assertThat(actualTable.getColumn("id").getDataType())
+                .isEqualToIgnoringCase("bigint");
+        Assertions.assertThat(actualTable.getColumn("number").getDataType())
+                .isEqualToIgnoringCase("double");
     }
 
     @Test
