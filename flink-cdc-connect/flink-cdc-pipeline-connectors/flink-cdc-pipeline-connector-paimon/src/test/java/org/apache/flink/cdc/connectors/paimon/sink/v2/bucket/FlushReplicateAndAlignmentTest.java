@@ -18,13 +18,10 @@
 package org.apache.flink.cdc.connectors.paimon.sink.v2.bucket;
 
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.cdc.common.event.CreateTableEvent;
 import org.apache.flink.cdc.common.event.Event;
 import org.apache.flink.cdc.common.event.FlushEvent;
 import org.apache.flink.cdc.common.event.SchemaChangeEventType;
 import org.apache.flink.cdc.common.event.TableId;
-import org.apache.flink.cdc.common.schema.Schema;
-import org.apache.flink.cdc.common.types.DataTypes;
 import org.apache.flink.streaming.api.operators.Output;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
@@ -43,110 +40,51 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/** Tests for flush replication and alignment used by the Paimon pre-write topology. */
+/** Tests for distributed flush replication and the existing per-source alignment. */
 class FlushReplicateAndAlignmentTest {
 
     private static final TableId CUSTOMERS = TableId.tableId("inventory", "customers");
     private static final TableId ORDERS = TableId.tableId("inventory", "orders");
 
     @Test
-    void testReplicateFlushToEverySubtaskAndKeepDataLocal() throws Exception {
-        FlushReplicateOperator operator = new FlushReplicateOperator();
-        CollectingOutput<Tuple2<Integer, Event>> output = new CollectingOutput<>();
-        setField(operator, "output", output);
-        setField(operator, "parallelism", 2);
-        setField(operator, "subtaskId", 0);
+    void testEverySchemaSubtaskReplicatesWithDistinctAlignmentKey() throws Exception {
+        FlushReplicateOperator first = replicateOperator(2, 0);
+        CollectingOutput<Tuple2<Integer, Event>> firstOutput = collectTo(first);
+        first.processElement(new StreamRecord<>(flushEvent(1, ORDERS)));
 
-        operator.processElement(new StreamRecord<>(flushEvent(0, CUSTOMERS)));
-        Assertions.assertThat(output.records)
+        Assertions.assertThat(firstOutput.records)
                 .extracting(record -> record.getValue().f0)
                 .containsExactly(0, 1);
+        Assertions.assertThat(firstOutput.records)
+                .extracting(record -> ((FlushEvent) record.getValue().f1).getSourceSubTaskId())
+                .containsOnly(2);
 
-        output.records.clear();
-        DataChangeEventStub data = new DataChangeEventStub();
-        operator.processElement(new StreamRecord<>(data));
-        Assertions.assertThat(output.records).hasSize(1);
-        Assertions.assertThat(output.records.get(0).getValue().f0).isEqualTo(0);
-        Assertions.assertThat(output.records.get(0).getValue().f1).isSameAs(data);
+        FlushReplicateOperator second = replicateOperator(2, 1);
+        CollectingOutput<Tuple2<Integer, Event>> secondOutput = collectTo(second);
+        second.processElement(new StreamRecord<>(flushEvent(0, CUSTOMERS)));
+
+        Assertions.assertThat(secondOutput.records)
+                .extracting(record -> record.getValue().f0)
+                .containsExactly(0, 1);
+        Assertions.assertThat(secondOutput.records)
+                .extracting(record -> ((FlushEvent) record.getValue().f1).getSourceSubTaskId())
+                .containsOnly(1);
     }
 
     @Test
-    void testAlignmentWaitsForAllAssignersPerSource() throws Exception {
-        FlushEventAlignmentOperator operator = alignmentOperator(2);
+    void testConcurrentCreatesFromDifferentSourcesBothAlign() throws Exception {
+        FlushEventAlignmentOperator operator = alignmentOperator(2, true);
         CollectingOutput<Event> output = collectTo(operator);
 
-        operator.processElement(flushRecord(0, 0, CUSTOMERS));
-        Assertions.assertThat(output.records).isEmpty();
-        operator.processElement(flushRecord(0, 1, CUSTOMERS));
-        Assertions.assertThat(output.records).hasSize(1);
-        FlushEvent flushEvent = (FlushEvent) output.records.get(0).getValue();
-        Assertions.assertThat(flushEvent.getSourceSubTaskId()).isEqualTo(0);
-        Assertions.assertThat(flushEvent.getTableIds()).containsExactly(CUSTOMERS);
-    }
-
-    @Test
-    void testAlignmentIgnoresReplicatedCopiesOfTheSameFlush() throws Exception {
-        FlushEventAlignmentOperator operator = alignmentOperator(2);
-        CollectingOutput<Event> output = collectTo(operator);
-
-        operator.processElement(flushRecord(0, 0, CUSTOMERS));
-        operator.processElement(flushRecord(0, 1, CUSTOMERS));
-        Assertions.assertThat(output.records).hasSize(1);
-
-        operator.processElement(flushRecord(0, 0, CUSTOMERS));
-        operator.processElement(flushRecord(0, 1, CUSTOMERS));
-        Assertions.assertThat(output.records).hasSize(1);
-    }
-
-    @Test
-    void testDataChangeDoesNotResetFlushFingerprint() throws Exception {
-        FlushEventAlignmentOperator operator = alignmentOperator(2);
-        CollectingOutput<Event> output = collectTo(operator);
-
-        operator.processElement(flushRecord(0, 0, CUSTOMERS));
-        operator.processElement(flushRecord(0, 1, CUSTOMERS));
-        Assertions.assertThat(output.records).hasSize(1);
-
-        operator.processElement(new StreamRecord<>(new DataChangeEventStub()));
-        operator.processElement(flushRecord(0, 0, CUSTOMERS));
-        operator.processElement(flushRecord(0, 1, CUSTOMERS));
-        Assertions.assertThat(output.records).hasSize(2);
-        Assertions.assertThat(output.records.get(1).getValue())
-                .isInstanceOf(DataChangeEventStub.class);
-    }
-
-    @Test
-    void testSchemaChangeAllowsAnotherFlushRoundForSameTable() throws Exception {
-        FlushEventAlignmentOperator operator = alignmentOperator(2);
-        CollectingOutput<Event> output = collectTo(operator);
-
-        operator.processElement(flushRecord(0, 0, CUSTOMERS));
-        operator.processElement(flushRecord(0, 1, CUSTOMERS));
-        Assertions.assertThat(output.records).hasSize(1);
-
-        Schema schema =
-                Schema.newBuilder().physicalColumn("id", DataTypes.INT()).primaryKey("id").build();
-        operator.processElement(new StreamRecord<>(new CreateTableEvent(CUSTOMERS, schema)));
-        operator.processElement(flushRecord(0, 0, CUSTOMERS));
-        operator.processElement(flushRecord(0, 1, CUSTOMERS));
-        Assertions.assertThat(
-                        output.records.stream()
-                                .filter(record -> record.getValue() instanceof FlushEvent)
-                                .count())
-                .isEqualTo(2);
-    }
-
-    @Test
-    void testConcurrentCreatesFromDifferentSourcesBothComplete() throws Exception {
-        FlushEventAlignmentOperator operator = alignmentOperator(2);
-        CollectingOutput<Event> output = collectTo(operator);
-
-        operator.processElement(flushRecord(0, 0, CUSTOMERS));
-        operator.processElement(flushRecord(1, 1, ORDERS));
+        // Schema subtask 0 handles source 1 first (key 2), while schema subtask 1 handles source 0
+        // first (key 1). Each original flush remains an independent alignment round.
+        operator.processElement(flushRecord(2, 0, ORDERS));
+        operator.processElement(flushRecord(1, 1, CUSTOMERS));
         Assertions.assertThat(output.records).isEmpty();
 
-        operator.processElement(flushRecord(0, 1, CUSTOMERS));
-        operator.processElement(flushRecord(1, 0, ORDERS));
+        operator.processElement(flushRecord(2, 1, ORDERS));
+        operator.processElement(flushRecord(1, 0, CUSTOMERS));
+
         List<Integer> sources =
                 output.records.stream()
                         .map(record -> ((FlushEvent) record.getValue()).getSourceSubTaskId())
@@ -154,18 +92,39 @@ class FlushReplicateAndAlignmentTest {
         Assertions.assertThat(sources).containsExactlyInAnyOrder(0, 1);
     }
 
-    private static FlushEventAlignmentOperator alignmentOperator(int parallelism) throws Exception {
-        FlushEventAlignmentOperator operator = new FlushEventAlignmentOperator();
-        setField(operator, "totalTasksNumber", parallelism);
-        setField(operator, "currentSubTaskId", 0);
-        setField(operator, "sourceTaskIdToAssignBucketSubTaskIds", new HashMap<>());
-        setField(operator, "emittedFlushes", new HashMap<>());
+    @Test
+    void testAlignmentKeepsIndependentRoundsForSameSource() throws Exception {
+        FlushEventAlignmentOperator operator = alignmentOperator(2, false);
+        CollectingOutput<Event> output = collectTo(operator);
+
+        operator.processElement(flushRecord(0, 0, CUSTOMERS));
+        operator.processElement(flushRecord(0, 1, CUSTOMERS));
+        operator.processElement(flushRecord(0, 0, CUSTOMERS));
+        operator.processElement(flushRecord(0, 1, CUSTOMERS));
+
+        Assertions.assertThat(output.records).hasSize(2);
+    }
+
+    private static FlushReplicateOperator replicateOperator(int parallelism, int subtaskId)
+            throws Exception {
+        FlushReplicateOperator operator = new FlushReplicateOperator();
+        setField(operator, "parallelism", parallelism);
+        setField(operator, "subtaskId", subtaskId);
         return operator;
     }
 
-    private static CollectingOutput<Event> collectTo(FlushEventAlignmentOperator operator)
-            throws Exception {
-        CollectingOutput<Event> output = new CollectingOutput<>();
+    private static FlushEventAlignmentOperator alignmentOperator(
+            int parallelism, boolean decodeReplicatedSource) throws Exception {
+        FlushEventAlignmentOperator operator =
+                new FlushEventAlignmentOperator(decodeReplicatedSource);
+        setField(operator, "totalTasksNumber", parallelism);
+        setField(operator, "currentSubTaskId", 0);
+        setField(operator, "sourceTaskIdToAssignBucketSubTaskIds", new HashMap<>());
+        return operator;
+    }
+
+    private static <T> CollectingOutput<T> collectTo(Object operator) throws Exception {
+        CollectingOutput<T> output = new CollectingOutput<>();
         setField(operator, "output", output);
         return output;
     }
@@ -202,8 +161,6 @@ class FlushReplicateAndAlignmentTest {
         }
         throw new NoSuchFieldException(fieldName);
     }
-
-    private static final class DataChangeEventStub implements Event {}
 
     private static class CollectingOutput<T> implements Output<StreamRecord<T>> {
         private final List<StreamRecord<T>> records = new ArrayList<>();

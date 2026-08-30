@@ -27,14 +27,11 @@ import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 
 /**
- * Replicates {@link FlushEvent}s to every downstream subtask and keeps other events on the local
- * subtask.
+ * Replicates each distributed {@link FlushEvent} to every bucket assigner.
  *
- * <p>Kafka sources use a distributed schema topology: each schema operator subtask forwards {@link
- * FlushEvent}s only to its paired bucket-assigner. {@link FlushEventAlignmentOperator} still waits
- * for every assigner, which deadlocks when two tables flush different source partitions at the same
- * time. Replicating {@link FlushEvent}s gives every assigner a chance to report, matching regular
- * topology (MySQL) where {@code RegularPrePartitionOperator} already broadcasts flush events.
+ * <p>The source partition and emitting schema subtask are encoded into an internal alignment key.
+ * This keeps concurrent flushes independent even when schema subtasks process broadcasts in
+ * different orders.
  */
 public class FlushReplicateOperator extends AbstractStreamOperatorAdapter<Tuple2<Integer, Event>>
         implements OneInputStreamOperator<Event, Tuple2<Integer, Event>> {
@@ -57,8 +54,21 @@ public class FlushReplicateOperator extends AbstractStreamOperatorAdapter<Tuple2
     public void processElement(StreamRecord<Event> streamRecord) {
         Event event = streamRecord.getValue();
         if (event instanceof FlushEvent) {
+            FlushEvent flushEvent = (FlushEvent) event;
+            int alignmentKey =
+                    Math.addExact(
+                            Math.multiplyExact(flushEvent.getSourceSubTaskId(), parallelism),
+                            subtaskId);
+            FlushEvent replicatedFlush =
+                    new FlushEvent(
+                            alignmentKey,
+                            flushEvent.getTableIds(),
+                            flushEvent.getSchemaChangeEventType());
             for (int target = 0; target < parallelism; target++) {
-                Event payload = target == subtaskId ? event : EventSerializer.INSTANCE.copy(event);
+                Event payload =
+                        target == subtaskId
+                                ? replicatedFlush
+                                : EventSerializer.INSTANCE.copy(replicatedFlush);
                 output.collect(new StreamRecord<>(Tuple2.of(target, payload)));
             }
         } else {

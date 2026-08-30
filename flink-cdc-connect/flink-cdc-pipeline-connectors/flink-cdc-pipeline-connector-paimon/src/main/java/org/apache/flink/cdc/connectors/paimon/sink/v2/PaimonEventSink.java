@@ -45,29 +45,45 @@ public class PaimonEventSink extends PaimonSink<Event> implements SupportsPreWri
 
     public final ZoneId zoneId;
 
+    private final boolean parallelMetadataSource;
+
     public PaimonEventSink(
             Options catalogOptions,
             String commitUser,
             PaimonRecordSerializer<Event> serializer,
             String schemaOperatorUid,
             ZoneId zoneId) {
+        this(catalogOptions, commitUser, serializer, schemaOperatorUid, zoneId, false);
+    }
+
+    public PaimonEventSink(
+            Options catalogOptions,
+            String commitUser,
+            PaimonRecordSerializer<Event> serializer,
+            String schemaOperatorUid,
+            ZoneId zoneId,
+            boolean parallelMetadataSource) {
         super(catalogOptions, commitUser, serializer);
         this.schemaOperatorUid = schemaOperatorUid;
         this.zoneId = zoneId;
+        this.parallelMetadataSource = parallelMetadataSource;
     }
 
     @Override
     public DataStream<Event> addPreWriteTopology(DataStream<Event> dataStream) {
-        // Replicate FlushEvent to every bucket-assigner (needed for distributed Kafka topology),
-        // then shuffle by key hash => assign bucket => shuffle by bucket.
+        if (parallelMetadataSource) {
+            dataStream =
+                    dataStream
+                            .transform(
+                                    "ReplicateFlush",
+                                    new TupleTypeInfo<>(Types.INT, new EventTypeInfo()),
+                                    new FlushReplicateOperator())
+                            .partitionCustom(Math::floorMod, FlushReplicateOperator::targetSubtask)
+                            .map(FlushReplicateOperator::unwrap)
+                            .returns(new EventTypeInfo());
+        }
+        // Shuffle by key hash => Assign bucket => Shuffle by bucket.
         return dataStream
-                .transform(
-                        "ReplicateFlush",
-                        new TupleTypeInfo<>(Types.INT, new EventTypeInfo()),
-                        new FlushReplicateOperator())
-                .partitionCustom(Math::floorMod, FlushReplicateOperator::targetSubtask)
-                .map(FlushReplicateOperator::unwrap)
-                .returns(new EventTypeInfo())
                 .transform(
                         "BucketAssign",
                         new BucketWrapperEventTypeInfo(),
@@ -91,7 +107,7 @@ public class PaimonEventSink extends PaimonSink<Event> implements SupportsPreWri
                 .transform(
                         "FlushEventAlignment",
                         new BucketWrapperEventTypeInfo(),
-                        new FlushEventAlignmentOperator());
+                        new FlushEventAlignmentOperator(parallelMetadataSource));
     }
 
     @Override
