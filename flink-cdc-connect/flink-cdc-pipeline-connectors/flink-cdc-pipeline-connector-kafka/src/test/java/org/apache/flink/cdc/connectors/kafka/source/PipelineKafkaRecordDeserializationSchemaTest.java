@@ -36,8 +36,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Tests for {@link DebeziumJsonEventDeserializationSchema}. */
-class DebeziumJsonEventDeserializationSchemaTest {
+/** Tests for {@link PipelineKafkaRecordDeserializationSchema}. */
+class PipelineKafkaRecordDeserializationSchemaTest {
 
     private static final byte[] KEY =
             bytes(
@@ -47,8 +47,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
     @Test
     void testDeserializeOperationsMetadataAndIgnoredRecords() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema();
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema();
         TestCollector collector = new TestCollector();
         String fields = field("int32", "id", false) + "," + field("string", "name", true);
 
@@ -90,8 +90,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
     @Test
     void testInterleavedOldNewOldSchemasUseWidestSchema() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema();
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema();
         TestCollector collector = new TestCollector();
         String oldFields = field("int32", "id", false) + "," + field("string", "name", true);
         String newFields =
@@ -138,8 +138,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
     @Test
     void testNewSchemaFirstThenOldSchemaOnAnotherPartition() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema();
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema();
         TestCollector collector = new TestCollector();
         String oldFields = field("int32", "id", false) + "," + field("string", "name", true);
         String newFields =
@@ -174,8 +174,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
     @Test
     void testIntToStringWideningOnSamePartition() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema();
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema();
         TestCollector collector = new TestCollector();
         String intFields = field("int32", "id", false) + "," + field("int32", "age", true);
         String stringFields = field("int32", "id", false) + "," + field("string", "age", true);
@@ -214,8 +214,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
     @Test
     void testStringThenHistoricalIntFromAnotherPartition() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema();
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema();
         TestCollector collector = new TestCollector();
         String intFields = field("int32", "id", false) + "," + field("int32", "age", true);
         String stringFields = field("int32", "id", false) + "," + field("string", "age", true);
@@ -236,8 +236,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
     @Test
     void testStringToIntWithinPartitionFailsClearly() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema();
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema();
         TestCollector collector = new TestCollector();
         String stringFields = field("int32", "id", false) + "," + field("string", "age", true);
         String intFields = field("int32", "id", false) + "," + field("int32", "age", true);
@@ -266,8 +266,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
     @Test
     void testDroppedColumnStaysInSchemaAndReadsAsNull() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema();
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema();
         TestCollector collector = new TestCollector();
         String fields = field("int32", "id", false) + "," + field("string", "name", true);
         deserializer.deserialize(
@@ -290,8 +290,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
     @Test
     void testRenamedColumnKeepsOldNameAndAddsNewColumn() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema();
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema();
         TestCollector collector = new TestCollector();
         String oldFields = field("int32", "id", false) + "," + field("string", "name", true);
         String renamedFields =
@@ -326,8 +326,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
     @Test
     void testNonNullableDroppedColumnBecomesNullable() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema();
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema();
         TestCollector collector = new TestCollector();
         String fields = field("int32", "id", false) + "," + field("string", "name", false);
         deserializer.deserialize(
@@ -352,8 +352,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
     @Test
     void testHistoricalNameAfterRenameFromAnotherPartition() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema();
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema();
         TestCollector collector = new TestCollector();
         String oldFields = field("int32", "id", false) + "," + field("string", "name", true);
         String renamedFields =
@@ -387,8 +387,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
     @Test
     void testSourceSchemaDoesNotUseKafkaKeyAsPrimaryKey() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema();
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema();
         TestCollector collector = new TestCollector();
         String fields = field("int32", "id", false) + "," + field("string", "name", true);
         byte[] routedKey =
@@ -414,8 +414,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
     @Test
     void testKafkaConnectFloatingTypesAndStringMapsToString() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema();
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema();
         TestCollector collector = new TestCollector();
         String fields =
                 field("int32", "id", false)
@@ -467,8 +467,8 @@ class DebeziumJsonEventDeserializationSchemaTest {
 
     @Test
     void testDebeziumColumnLengthParameterDoesNotCreateVarchar() throws Exception {
-        DebeziumJsonEventDeserializationSchema deserializer =
-                new DebeziumJsonEventDeserializationSchema();
+        PipelineKafkaRecordDeserializationSchema deserializer =
+                new PipelineKafkaRecordDeserializationSchema();
         TestCollector collector = new TestCollector();
 
         String fields = field("int32", "id", false) + "," + stringFieldWithLength("name", 32);

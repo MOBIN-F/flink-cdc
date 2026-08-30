@@ -61,7 +61,7 @@ public class KafkaDataSource implements DataSource {
         KafkaSourceBuilder<Event> builder =
                 KafkaSource.<Event>builder()
                         .setProperties(properties)
-                        .setDeserializer(new DebeziumJsonEventDeserializationSchema());
+                        .setDeserializer(new PipelineKafkaRecordDeserializationSchema());
         if (topicPattern == null) {
             builder.setTopics(topics);
         } else {

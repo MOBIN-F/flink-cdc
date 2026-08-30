@@ -84,4 +84,30 @@ public class DebeziumJsonStruct {
             return fieldName;
         }
     }
+
+    enum DebeziumOperation {
+        READ("r"),
+        CREATE("c"),
+        UPDATE("u"),
+        DELETE("d");
+
+        private final String code;
+
+        DebeziumOperation(String code) {
+            this.code = code;
+        }
+
+        public String getCode() {
+            return code;
+        }
+
+        static DebeziumOperation fromCode(String code) {
+            for (DebeziumOperation operation : values()) {
+                if (operation.code.equals(code)) {
+                    return operation;
+                }
+            }
+            return null;
+        }
+    }
 }

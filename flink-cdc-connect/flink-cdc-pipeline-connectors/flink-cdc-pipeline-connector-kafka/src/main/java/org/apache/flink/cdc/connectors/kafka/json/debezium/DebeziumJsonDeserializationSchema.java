@@ -15,18 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.flink.cdc.connectors.kafka.source;
+package org.apache.flink.cdc.connectors.kafka.json.debezium;
 
-import org.apache.flink.api.common.serialization.DeserializationSchema;
-import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.cdc.common.data.DateData;
-import org.apache.flink.cdc.common.data.DecimalData;
-import org.apache.flink.cdc.common.data.GenericRecordData;
 import org.apache.flink.cdc.common.data.RecordData;
-import org.apache.flink.cdc.common.data.TimeData;
-import org.apache.flink.cdc.common.data.TimestampData;
-import org.apache.flink.cdc.common.data.ZonedTimestampData;
-import org.apache.flink.cdc.common.data.binary.BinaryStringData;
 import org.apache.flink.cdc.common.event.AddColumnEvent;
 import org.apache.flink.cdc.common.event.AlterColumnTypeEvent;
 import org.apache.flink.cdc.common.event.CreateTableEvent;
@@ -39,7 +30,6 @@ import org.apache.flink.cdc.common.types.DataType;
 import org.apache.flink.cdc.common.types.DataTypeRoot;
 import org.apache.flink.cdc.common.types.DataTypes;
 import org.apache.flink.cdc.common.types.DecimalType;
-import org.apache.flink.connector.kafka.source.reader.deserializer.KafkaRecordDeserializationSchema;
 import org.apache.flink.util.Collector;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
@@ -48,75 +38,79 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMap
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 
-/** Converts schema-enabled Debezium JSON Kafka records into pipeline events. */
-public class DebeziumJsonEventDeserializationSchema
-        implements KafkaRecordDeserializationSchema<Event> {
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.AFTER;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.BEFORE;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.OPERATION;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumPayload.SOURCE;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumSource.DATABASE;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumSource.TABLE;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumStruct.PAYLOAD;
+import static org.apache.flink.cdc.connectors.kafka.json.debezium.DebeziumJsonStruct.DebeziumStruct.SCHEMA;
+
+/**
+ * Deserialization schema from Debezium JSON to Flink CDC pipeline internal data structure {@link
+ * Event}.
+ */
+public class DebeziumJsonDeserializationSchema implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
     private transient ObjectMapper mapper;
+    private transient DebeziumJsonSchemaParser schemaParser;
+    private transient DebeziumJsonRecordDataConverter recordConverter;
     private transient Map<TableId, TableSchemaState> globalTableSchemas;
     private transient Map<PartitionTableKey, Schema> partitionTableSchemas;
 
-    @Override
-    public void open(DeserializationSchema.InitializationContext context) {
+    public void open() {
         initialize();
     }
 
-    @Override
     public void deserialize(ConsumerRecord<byte[], byte[]> record, Collector<Event> out)
             throws IOException {
         initialize();
-        if (record.value() == null) {
-            return;
-        }
         JsonNode root = mapper.readTree(record.value());
-        JsonNode payload = root.path("payload");
-        JsonNode source = payload.path("source");
-        JsonNode opNode = payload.path("op");
+        JsonNode payload = root.path(PAYLOAD.getFieldName());
+        JsonNode source = payload.path(SOURCE.getFieldName());
+        JsonNode opNode = payload.path(OPERATION.getFieldName());
         if (payload.isMissingNode()
                 || payload.isNull()
                 || opNode.isMissingNode()
                 || opNode.isNull()
-                || source.path("db").isMissingNode()
-                || source.path("table").isMissingNode()) {
+                || source.path(DATABASE.getFieldName()).isMissingNode()
+                || source.path(TABLE.getFieldName()).isMissingNode()) {
             return;
         }
 
-        String operation = opNode.asText();
-        if (!operation.equals("r")
-                && !operation.equals("c")
-                && !operation.equals("u")
-                && !operation.equals("d")) {
+        DebeziumJsonStruct.DebeziumOperation operation =
+                DebeziumJsonStruct.DebeziumOperation.fromCode(opNode.asText());
+        if (operation == null) {
             return;
         }
         TableId tableId =
-                TableId.tableId(source.path("db").asText(), source.path("table").asText());
-        JsonNode rowSchemaNode = findFieldSchema(root.path("schema"), "after");
+                TableId.tableId(
+                        source.path(DATABASE.getFieldName()).asText(),
+                        source.path(TABLE.getFieldName()).asText());
+        JsonNode rowSchemaNode =
+                schemaParser.findFieldSchema(
+                        root.path(SCHEMA.getFieldName()), AFTER.getFieldName());
         if (rowSchemaNode == null) {
-            rowSchemaNode = findFieldSchema(root.path("schema"), "before");
+            rowSchemaNode =
+                    schemaParser.findFieldSchema(
+                            root.path(SCHEMA.getFieldName()), BEFORE.getFieldName());
         }
         if (rowSchemaNode == null || !rowSchemaNode.path("fields").isArray()) {
             throw failure(record, "Debezium value does not contain a before/after row schema.");
         }
 
-        Schema incomingSchema = parseSchema(rowSchemaNode);
+        Schema incomingSchema = schemaParser.parseSchema(rowSchemaNode);
         PartitionTableKey partitionTableKey =
                 new PartitionTableKey(record.topic(), record.partition(), tableId);
         Schema partitionSchema = partitionTableSchemas.get(partitionTableKey);
@@ -142,19 +136,21 @@ public class DebeziumJsonEventDeserializationSchema
         meta.put("topic", record.topic());
         meta.put("partition", String.valueOf(record.partition()));
         meta.put("offset", String.valueOf(record.offset()));
-        RecordData before = convertRecord(payload.get("before"), state.schema);
-        RecordData after = convertRecord(payload.get("after"), state.schema);
+        RecordData before =
+                recordConverter.convertRecord(payload.get(BEFORE.getFieldName()), state.schema);
+        RecordData after =
+                recordConverter.convertRecord(payload.get(AFTER.getFieldName()), state.schema);
         switch (operation) {
-            case "r":
-            case "c":
+            case READ:
+            case CREATE:
                 out.collect(DataChangeEvent.insertEvent(tableId, require(after, "after"), meta));
                 break;
-            case "u":
+            case UPDATE:
                 out.collect(
                         DataChangeEvent.updateEvent(
                                 tableId, require(before, "before"), require(after, "after"), meta));
                 break;
-            case "d":
+            case DELETE:
                 out.collect(DataChangeEvent.deleteEvent(tableId, require(before, "before"), meta));
                 break;
             default:
@@ -162,124 +158,21 @@ public class DebeziumJsonEventDeserializationSchema
         }
     }
 
-    @Override
-    public TypeInformation<Event> getProducedType() {
-        return TypeInformation.of(Event.class);
-    }
-
     private void initialize() {
         if (mapper == null) {
             mapper = new ObjectMapper();
+        }
+        if (schemaParser == null) {
+            schemaParser = new DebeziumJsonSchemaParser();
+        }
+        if (recordConverter == null) {
+            recordConverter = new DebeziumJsonRecordDataConverter();
         }
         if (globalTableSchemas == null) {
             globalTableSchemas = new HashMap<>();
         }
         if (partitionTableSchemas == null) {
             partitionTableSchemas = new HashMap<>();
-        }
-    }
-
-    private Schema parseSchema(JsonNode rowSchema) {
-        Schema.Builder builder = Schema.newBuilder();
-        for (JsonNode field : rowSchema.path("fields")) {
-            builder.physicalColumn(
-                    requiredText(field, "field", "Debezium row schema field"), parseType(field));
-        }
-        return builder.build();
-    }
-
-    private DataType parseType(JsonNode schema) {
-        String logicalName = schema.path("name").asText("");
-        DataType type;
-        switch (logicalName) {
-            case "io.debezium.time.Date":
-                type = DataTypes.DATE();
-                break;
-            case "io.debezium.time.Time":
-                type = DataTypes.TIME(3);
-                break;
-            case "io.debezium.time.MicroTime":
-                type = DataTypes.TIME(6);
-                break;
-            case "io.debezium.time.NanoTime":
-                type = DataTypes.TIME(9);
-                break;
-            case "io.debezium.time.Timestamp":
-                type = DataTypes.TIMESTAMP(3);
-                break;
-            case "io.debezium.time.MicroTimestamp":
-                type = DataTypes.TIMESTAMP(6);
-                break;
-            case "io.debezium.time.NanoTimestamp":
-                type = DataTypes.TIMESTAMP(9);
-                break;
-            case "io.debezium.time.ZonedTimestamp":
-                type = DataTypes.TIMESTAMP_TZ(9);
-                break;
-            case "io.debezium.time.Year":
-                type = DataTypes.INT();
-                break;
-            case "io.debezium.data.Bits":
-                type =
-                        DataTypes.VARBINARY(
-                                positiveParameter(schema, "length").orElse(Integer.MAX_VALUE));
-                break;
-            case "io.debezium.data.Enum":
-            case "io.debezium.data.Json":
-                type = DataTypes.STRING();
-                break;
-            case "org.apache.kafka.connect.data.Decimal":
-                int scale = schema.path("parameters").path("scale").asInt(0);
-                int precision =
-                        schema.path("parameters").path("connect.decimal.precision").asInt(38);
-                type = DataTypes.DECIMAL(Math.min(38, precision), Math.min(scale, precision));
-                break;
-            default:
-                type = parsePrimitiveType(schema);
-        }
-        return schema.path("optional").asBoolean(true) ? type.nullable() : type.notNull();
-    }
-
-    private DataType parsePrimitiveType(JsonNode schema) {
-        String type = schema.path("type").asText();
-        switch (type) {
-            case "int8":
-                return DataTypes.TINYINT();
-            case "int16":
-                return DataTypes.SMALLINT();
-            case "int32":
-                return DataTypes.INT();
-            case "int64":
-                return DataTypes.BIGINT();
-            case "float":
-            case "float32":
-                return DataTypes.FLOAT();
-            case "double":
-            case "float64":
-                return DataTypes.DOUBLE();
-            case "boolean":
-                return DataTypes.BOOLEAN();
-            case "bytes":
-                return DataTypes.BYTES();
-            case "string":
-                // Kafka Connect has no VARCHAR; MySQL CHAR/VARCHAR/TEXT all become string.
-                return DataTypes.STRING();
-            default:
-                throw new IllegalArgumentException(
-                        "Unsupported Debezium schema type '" + type + "'.");
-        }
-    }
-
-    private Optional<Integer> positiveParameter(JsonNode schema, String name) {
-        JsonNode value = schema.path("parameters").path(name);
-        if (value.isMissingNode() || value.isNull()) {
-            return Optional.empty();
-        }
-        try {
-            int parsed = Integer.parseInt(value.asText());
-            return parsed > 0 ? Optional.of(parsed) : Optional.empty();
-        } catch (NumberFormatException ignored) {
-            return Optional.empty();
         }
     }
 
@@ -449,145 +342,12 @@ public class DebeziumJsonEventDeserializationSchema
         }
     }
 
-    private RecordData convertRecord(JsonNode row, Schema targetSchema) {
-        if (row == null || row.isNull()) {
-            return null;
-        }
-        GenericRecordData result = new GenericRecordData(targetSchema.getColumnCount());
-        for (int i = 0; i < targetSchema.getColumnCount(); i++) {
-            Column column = targetSchema.getColumns().get(i);
-            result.setField(i, convertValue(row.get(column.getName()), column.getType()));
-        }
-        return result;
-    }
-
-    private Object convertValue(JsonNode node, DataType targetType) {
-        if (node == null || node.isNull()) {
-            return null;
-        }
-        switch (targetType.getTypeRoot()) {
-            case TINYINT:
-                return (byte) node.asInt();
-            case SMALLINT:
-                return (short) node.asInt();
-            case INTEGER:
-                return node.asInt();
-            case BIGINT:
-                return node.asLong();
-            case FLOAT:
-                return (float) node.asDouble();
-            case DOUBLE:
-                return node.asDouble();
-            case BOOLEAN:
-                return node.asBoolean();
-            case CHAR:
-            case VARCHAR:
-                return BinaryStringData.fromString(node.asText());
-            case BINARY:
-            case VARBINARY:
-                return node.isBinary()
-                        ? binaryValue(node)
-                        : Base64.getDecoder()
-                                .decode(node.asText().getBytes(StandardCharsets.UTF_8));
-            case DECIMAL:
-                DecimalType decimalType = (DecimalType) targetType;
-                return DecimalData.fromBigDecimal(
-                        decimalValue(node, decimalType.getScale()),
-                        decimalType.getPrecision(),
-                        decimalType.getScale());
-            case DATE:
-                return node.isIntegralNumber()
-                        ? DateData.fromEpochDay(node.asInt())
-                        : DateData.fromIsoLocalDateString(node.asText());
-            case TIME_WITHOUT_TIME_ZONE:
-                return node.isIntegralNumber()
-                        ? TimeData.fromNanoOfDay(
-                                normalizeTimeToNanos(
-                                        node.asLong(),
-                                        DataTypes.getPrecision(targetType).orElse(3)))
-                        : TimeData.fromIsoLocalTimeString(node.asText());
-            case TIMESTAMP_WITHOUT_TIME_ZONE:
-                return node.isIntegralNumber()
-                        ? TimestampData.fromLocalDateTime(
-                                LocalDateTime.ofInstant(
-                                        Instant.ofEpochMilli(
-                                                normalizeTimestampToMillis(
-                                                        node.asLong(),
-                                                        DataTypes.getPrecision(targetType)
-                                                                .orElse(3))),
-                                        ZoneOffset.UTC))
-                        : TimestampData.fromLocalDateTime(LocalDateTime.parse(node.asText()));
-            case TIMESTAMP_WITH_TIME_ZONE:
-                return ZonedTimestampData.fromZonedDateTime(ZonedDateTime.parse(node.asText()));
-            default:
-                throw new IllegalArgumentException(
-                        "Unsupported target type " + targetType.asSummaryString() + ".");
-        }
-    }
-
-    private byte[] binaryValue(JsonNode node) {
-        try {
-            return node.binaryValue();
-        } catch (IOException e) {
-            throw new IllegalArgumentException("Cannot decode Debezium binary value.", e);
-        }
-    }
-
-    private BigDecimal decimalValue(JsonNode node, int scale) {
-        if (node.isNumber()) {
-            return node.decimalValue();
-        }
-        try {
-            return new BigDecimal(node.asText());
-        } catch (NumberFormatException ignored) {
-            byte[] unscaled = Base64.getDecoder().decode(node.asText());
-            return new BigDecimal(new BigInteger(unscaled), scale);
-        }
-    }
-
-    private long normalizeTimeToNanos(long value, int precision) {
-        if (precision <= 3) {
-            return value * 1_000_000L;
-        }
-        if (precision <= 6) {
-            return value * 1_000L;
-        }
-        return value;
-    }
-
-    private long normalizeTimestampToMillis(long value, int precision) {
-        if (precision > 6) {
-            return value / 1_000_000L;
-        }
-        if (precision > 3) {
-            return value / 1_000L;
-        }
-        return value;
-    }
-
-    private JsonNode findFieldSchema(JsonNode envelopeSchema, String fieldName) {
-        for (JsonNode field : envelopeSchema.path("fields")) {
-            if (fieldName.equals(field.path("field").asText())) {
-                return field;
-            }
-        }
-        return null;
-    }
-
     private Map<String, Column> columnsByName(Schema schema) {
         Map<String, Column> result = new HashMap<>();
         for (Column column : schema.getColumns()) {
             result.put(column.getName(), column);
         }
         return result;
-    }
-
-    private String requiredText(JsonNode node, String field, String description) {
-        JsonNode value = node.get(field);
-        if (value == null || value.isNull() || value.asText().isEmpty()) {
-            throw new IllegalArgumentException(description + " is missing '" + field + "'.");
-        }
-        return value.asText();
     }
 
     private RecordData require(RecordData record, String name) {
