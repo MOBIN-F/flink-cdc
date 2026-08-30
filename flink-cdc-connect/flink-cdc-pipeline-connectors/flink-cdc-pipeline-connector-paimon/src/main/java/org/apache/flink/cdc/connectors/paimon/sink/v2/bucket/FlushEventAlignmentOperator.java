@@ -17,17 +17,24 @@
 
 package org.apache.flink.cdc.connectors.paimon.sink.v2.bucket;
 
+import org.apache.flink.cdc.common.event.ChangeEvent;
 import org.apache.flink.cdc.common.event.Event;
 import org.apache.flink.cdc.common.event.FlushEvent;
+import org.apache.flink.cdc.common.event.SchemaChangeEvent;
+import org.apache.flink.cdc.common.event.SchemaChangeEventType;
+import org.apache.flink.cdc.common.event.TableId;
 import org.apache.flink.cdc.runtime.operators.AbstractStreamOperatorAdapter;
 import org.apache.flink.cdc.runtime.operators.schema.regular.SchemaOperator;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /** Align {@link FlushEvent}s broadcasted by {@link BucketAssignOperator}. */
@@ -42,6 +49,13 @@ public class FlushEventAlignmentOperator extends AbstractStreamOperatorAdapter<E
      */
     private transient Map<Integer, Set<Integer>> sourceTaskIdToAssignBucketSubTaskIds;
 
+    /**
+     * Last {@link FlushEvent} forwarded for each source subtask. Copies produced by {@link
+     * FlushReplicateOperator} (or by {@code RegularPrePartitionOperator} plus replication) must not
+     * start another alignment round. A later schema change on the same table starts a new round.
+     */
+    private transient Map<Integer, FlushFingerprint> emittedFlushes;
+
     private transient int currentSubTaskId;
 
     public FlushEventAlignmentOperator() {
@@ -55,6 +69,7 @@ public class FlushEventAlignmentOperator extends AbstractStreamOperatorAdapter<E
         this.totalTasksNumber = getRuntimeContext().getTaskInfo().getNumberOfParallelSubtasks();
         this.currentSubTaskId = getRuntimeContext().getTaskInfo().getIndexOfThisSubtask();
         sourceTaskIdToAssignBucketSubTaskIds = new HashMap<>();
+        emittedFlushes = new HashMap<>();
     }
 
     @Override
@@ -63,6 +78,10 @@ public class FlushEventAlignmentOperator extends AbstractStreamOperatorAdapter<E
         if (event instanceof BucketWrapperFlushEvent) {
             BucketWrapperFlushEvent bucketWrapperFlushEvent = (BucketWrapperFlushEvent) event;
             int sourceSubTaskId = bucketWrapperFlushEvent.getSourceSubTaskId();
+            FlushFingerprint fingerprint = FlushFingerprint.from(bucketWrapperFlushEvent);
+            if (fingerprint.equals(emittedFlushes.get(sourceSubTaskId))) {
+                return;
+            }
             Set<Integer> subTaskIds =
                     sourceTaskIdToAssignBucketSubTaskIds.getOrDefault(
                             sourceSubTaskId, new HashSet<>());
@@ -77,6 +96,7 @@ public class FlushEventAlignmentOperator extends AbstractStreamOperatorAdapter<E
                                         bucketWrapperFlushEvent.getTableIds(),
                                         bucketWrapperFlushEvent.getSchemaChangeEventType())));
                 sourceTaskIdToAssignBucketSubTaskIds.remove(sourceSubTaskId);
+                emittedFlushes.put(sourceSubTaskId, fingerprint);
             } else {
                 LOG.info(
                         "{} collect FlushEvent of {} with subtask {}",
@@ -86,7 +106,58 @@ public class FlushEventAlignmentOperator extends AbstractStreamOperatorAdapter<E
                 sourceTaskIdToAssignBucketSubTaskIds.put(sourceSubTaskId, subTaskIds);
             }
         } else {
+            TableId schemaChangeTableId = extractSchemaChangeTableId(event);
+            if (schemaChangeTableId != null) {
+                emittedFlushes
+                        .entrySet()
+                        .removeIf(entry -> entry.getValue().tableIds.contains(schemaChangeTableId));
+            }
             output.collect(streamRecord);
+        }
+    }
+
+    private static TableId extractSchemaChangeTableId(Event event) {
+        if (event instanceof SchemaChangeEvent) {
+            return ((SchemaChangeEvent) event).tableId();
+        }
+        if (event instanceof BucketWrapperChangeEvent) {
+            ChangeEvent innerEvent = ((BucketWrapperChangeEvent) event).getInnerEvent();
+            if (innerEvent instanceof SchemaChangeEvent) {
+                return innerEvent.tableId();
+            }
+        }
+        return null;
+    }
+
+    private static final class FlushFingerprint {
+        private final SchemaChangeEventType type;
+        private final List<TableId> tableIds;
+
+        private FlushFingerprint(SchemaChangeEventType type, List<TableId> tableIds) {
+            this.type = type;
+            this.tableIds = tableIds;
+        }
+
+        private static FlushFingerprint from(BucketWrapperFlushEvent event) {
+            return new FlushFingerprint(
+                    event.getSchemaChangeEventType(), new ArrayList<>(event.getTableIds()));
+        }
+
+        @Override
+        public boolean equals(Object object) {
+            if (this == object) {
+                return true;
+            }
+            if (!(object instanceof FlushFingerprint)) {
+                return false;
+            }
+            FlushFingerprint that = (FlushFingerprint) object;
+            return type == that.type && Objects.equals(tableIds, that.tableIds);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(type, tableIds);
         }
     }
 }

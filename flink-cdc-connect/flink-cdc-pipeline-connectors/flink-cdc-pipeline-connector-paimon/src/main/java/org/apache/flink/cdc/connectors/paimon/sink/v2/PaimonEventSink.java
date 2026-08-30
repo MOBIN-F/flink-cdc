@@ -17,12 +17,16 @@
 
 package org.apache.flink.cdc.connectors.paimon.sink.v2;
 
+import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.cdc.common.event.Event;
 import org.apache.flink.cdc.connectors.paimon.sink.v2.bucket.BucketAssignOperator;
 import org.apache.flink.cdc.connectors.paimon.sink.v2.bucket.BucketWrapper;
 import org.apache.flink.cdc.connectors.paimon.sink.v2.bucket.BucketWrapperChangeEvent;
 import org.apache.flink.cdc.connectors.paimon.sink.v2.bucket.BucketWrapperEventTypeInfo;
 import org.apache.flink.cdc.connectors.paimon.sink.v2.bucket.FlushEventAlignmentOperator;
+import org.apache.flink.cdc.connectors.paimon.sink.v2.bucket.FlushReplicateOperator;
+import org.apache.flink.cdc.runtime.typeutils.EventTypeInfo;
 import org.apache.flink.core.io.SimpleVersionedSerializer;
 import org.apache.flink.streaming.api.connector.sink2.SupportsPreWriteTopology;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -54,8 +58,16 @@ public class PaimonEventSink extends PaimonSink<Event> implements SupportsPreWri
 
     @Override
     public DataStream<Event> addPreWriteTopology(DataStream<Event> dataStream) {
-        // Shuffle by key hash => Assign bucket => Shuffle by bucket.
+        // Replicate FlushEvent to every bucket-assigner (needed for distributed Kafka topology),
+        // then shuffle by key hash => assign bucket => shuffle by bucket.
         return dataStream
+                .transform(
+                        "ReplicateFlush",
+                        new TupleTypeInfo<>(Types.INT, new EventTypeInfo()),
+                        new FlushReplicateOperator())
+                .partitionCustom(Math::floorMod, FlushReplicateOperator::targetSubtask)
+                .map(FlushReplicateOperator::unwrap)
+                .returns(new EventTypeInfo())
                 .transform(
                         "BucketAssign",
                         new BucketWrapperEventTypeInfo(),
