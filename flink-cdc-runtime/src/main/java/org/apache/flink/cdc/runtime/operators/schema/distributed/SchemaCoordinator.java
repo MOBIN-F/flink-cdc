@@ -369,10 +369,20 @@ public class SchemaCoordinator extends SchemaRegistry {
                     .ifPresent(schema -> evolvedSchemaView.put(tableId, schema));
         }
 
+        runInEventLoop(
+                () -> finishSchemaChange(evolvedSchemaView, successfullyAppliedSchemaChangeEvents),
+                "Finishing schema change");
+    }
+
+    private void finishSchemaChange(
+            Map<TableId, Schema> evolvedSchemaView,
+            List<SchemaChangeEvent> successfullyAppliedSchemaChangeEvents)
+            throws Throwable {
         List<Tuple2<SchemaChangeRequest, CompletableFuture<CoordinationResponse>>> futures =
                 new ArrayList<>(pendingRequests.values());
 
-        // Restore coordinator internal states first...
+        // Restore coordinator internal states first. Since this runs in the coordinator event loop,
+        // new requests cannot observe IDLE before deferred requests have been promoted.
         pendingRequests.clear();
 
         LOG.info("Finished schema evolving. Switching from EVOLVING to IDLE.");
@@ -380,11 +390,15 @@ public class SchemaCoordinator extends SchemaRegistry {
                 evolvingStatus.compareAndSet(RequestStatus.EVOLVING, RequestStatus.IDLE),
                 "RequestStatus should be EVOLVING when schema evolving finishes.");
 
-        processDeferredRequests();
+        try {
+            processDeferredRequests();
+        } catch (Throwable t) {
+            futures.forEach(tuple -> tuple.f1.completeExceptionally(t));
+            throw t;
+        }
 
-        // ... and broadcast affected schema changes to mapper and release upstream then.
-        // Make sure we've cleaned-up internal state before this, or we may receive new requests in
-        // a dirty state.
+        // Broadcast affected schema changes to mapper and release upstream after internal state has
+        // been cleaned up.
         futures.forEach(
                 tuple -> {
                     LOG.info(
@@ -398,32 +412,21 @@ public class SchemaCoordinator extends SchemaRegistry {
                 });
     }
 
-    private void processDeferredRequests() {
+    private void processDeferredRequests() throws Exception {
         if (deferredRequests.isEmpty()) {
             return;
         }
 
-        CompletableFuture<Void> processedFuture = new CompletableFuture<>();
-        runInEventLoop(
-                () -> {
-                    try {
-                        int deferredRequestCount = deferredRequests.size();
-                        LOG.info(
-                                "Processing {} deferred schema change requests.",
-                                deferredRequestCount);
-                        for (int i = 0; i < deferredRequestCount; i++) {
-                            Tuple2<SchemaChangeRequest, CompletableFuture<CoordinationResponse>>
-                                    deferredRequest = deferredRequests.poll();
-                            if (deferredRequest != null) {
-                                handleSchemaEvolveRequest(deferredRequest.f0, deferredRequest.f1);
-                            }
-                        }
-                    } finally {
-                        processedFuture.complete(null);
-                    }
-                },
-                "Processing deferred schema change requests");
-        processedFuture.join();
+        int deferredRequestCount = deferredRequests.size();
+        LOG.info("Processing {} deferred schema change requests.", deferredRequestCount);
+        for (int i = 0; i < deferredRequestCount; i++) {
+            Tuple2<SchemaChangeRequest, CompletableFuture<CoordinationResponse>> deferredRequest =
+                    deferredRequests.peek();
+            if (deferredRequest != null) {
+                handleSchemaEvolveRequest(deferredRequest.f0, deferredRequest.f1);
+                deferredRequests.poll();
+            }
+        }
     }
 
     private Tuple2<Set<TableId>, List<SchemaChangeEvent>> deduceEvolvedSchemaChanges() {
